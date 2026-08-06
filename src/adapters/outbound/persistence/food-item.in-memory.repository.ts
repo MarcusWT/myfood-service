@@ -1,8 +1,26 @@
 import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../../core/domain/food-item.js';
+import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
 
 function clone(item: FoodItem): FoodItem {
   return { ...item };
+}
+
+function applyFilter(items: FoodItem[], filter?: FoodItemFilter): FoodItem[] {
+  let results = items;
+
+  if (filter?.location) {
+    results = results.filter((item) => item.location === filter.location);
+  }
+  if (filter?.category) {
+    results = results.filter((item) => item.category === filter.category);
+  }
+  if (filter?.name) {
+    const needle = filter.name.toLowerCase();
+    results = results.filter((item) => item.name.toLowerCase().includes(needle));
+  }
+
+  return results;
 }
 
 /**
@@ -23,22 +41,24 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
   }
 
   async findAll(filter?: FoodItemFilter): Promise<FoodItem[]> {
-    let results = Array.from(this.items.values());
+    const results = applyFilter(Array.from(this.items.values()), filter);
+    results.sort((a, b) => a.bestBefore.getTime() - b.bestBefore.getTime());
+    return results.map(clone);
+  }
 
-    if (filter?.location) {
-      results = results.filter((item) => item.location === filter.location);
-    }
-    if (filter?.category) {
-      results = results.filter((item) => item.category === filter.category);
-    }
-    if (filter?.name) {
-      const needle = filter.name.toLowerCase();
-      results = results.filter((item) => item.name.toLowerCase().includes(needle));
-    }
-
+  async findAllPaginated(
+    filter: FoodItemFilter,
+    pagination: PaginationInput,
+  ): Promise<PaginatedResult<FoodItem>> {
+    const results = applyFilter(Array.from(this.items.values()), filter);
     results.sort((a, b) => a.bestBefore.getTime() - b.bestBefore.getTime());
 
-    return results.map(clone);
+    const total = results.length;
+    const { page, limit } = pagination;
+    const start = (page - 1) * limit;
+    const data = results.slice(start, start + limit).map(clone);
+
+    return { data, total, page, limit };
   }
 
   async update(id: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {

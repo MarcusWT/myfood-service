@@ -36,14 +36,14 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 ---
 
-## 4. Pagination for `GET /food-items`
+## 4. Pagination for `GET /food-items` — ✅ Done
 
 **Why:** Without pagination, a large fridge tracker becomes a performance problem.
 
-- Add `page` and `limit` query parameters to `GET /food-items`
-- Update `FoodItemRepositoryPort.findAll` to accept `PaginationOptions`
-- Return a paginated envelope: `{ data, total, page, limit }`
-- Update SQLite adapter with `LIMIT` / `OFFSET` support
+- [x] Add `page` and `limit` query parameters to `GET /food-items`
+- [x] Update `FoodItemRepositoryPort.findAll` to accept `PaginationOptions` (added a separate `findAllPaginated` method; `findAll` kept unpaged for internal consumers that need the full dataset: `shopping-summary`, `recipe`, `expiry-alert` services)
+- [x] Return a paginated envelope: `{ data, total, page, limit }`
+- [x] Update SQLite adapter with `LIMIT` / `OFFSET` support
 
 ---
 

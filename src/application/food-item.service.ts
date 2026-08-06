@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter } from '../core/domain/food-item.js';
+import { PaginatedResult, PaginationInput } from '../core/domain/pagination.js';
 import { FoodItemServicePort } from '../core/ports/inbound/food-item.service.port.js';
 import { FoodItemRepositoryPort } from '../core/ports/outbound/food-item.repository.port.js';
 
@@ -34,6 +35,13 @@ export class FoodItemService implements FoodItemServicePort {
 
   async listItems(filter?: FoodItemFilter): Promise<FoodItem[]> {
     return this.repository.findAll(filter);
+  }
+
+  async listItemsPaginated(
+    filter: FoodItemFilter,
+    pagination: PaginationInput,
+  ): Promise<PaginatedResult<FoodItem>> {
+    return this.repository.findAllPaginated(filter, pagination);
   }
 
   async updateItem(id: string, input: UpdateFoodItemInput): Promise<FoodItem> {

@@ -68,21 +68,24 @@ describe('FoodItemController (HTTP)', () => {
   });
 
   describe('GET /api/v1/food-items', () => {
-    it('returns an empty array when no items exist', async () => {
+    it('returns an empty envelope when no items exist', async () => {
       const res = await request(app).get('/api/v1/food-items');
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual([]);
+      expect(res.body).toEqual({ data: [], total: 0, page: 1, limit: 20 });
     });
 
-    it('returns all seeded items', async () => {
+    it('returns all seeded items within the default page', async () => {
       await seedFoodItem(repo, { id: '11111111-1111-1111-1111-111111111111', name: 'Milk' });
       await seedFoodItem(repo, { id: '22222222-2222-2222-2222-222222222222', name: 'Cheese' });
 
       const res = await request(app).get('/api/v1/food-items');
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(2);
+      expect(res.body.data).toHaveLength(2);
+      expect(res.body.total).toBe(2);
+      expect(res.body.page).toBe(1);
+      expect(res.body.limit).toBe(20);
     });
 
     it('filters by location query param', async () => {
@@ -100,8 +103,9 @@ describe('FoodItemController (HTTP)', () => {
       const res = await request(app).get('/api/v1/food-items').query({ location: 'FREEZER' });
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0].name).toBe('Peas');
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.total).toBe(1);
+      expect(res.body.data[0].name).toBe('Peas');
     });
 
     it('filters by name query param (partial match)', async () => {
@@ -111,8 +115,8 @@ describe('FoodItemController (HTTP)', () => {
       const res = await request(app).get('/api/v1/food-items').query({ name: 'milk' });
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0].name).toBe('Whole Milk');
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].name).toBe('Whole Milk');
     });
 
     it('returns 400 when filter has an invalid category', async () => {
@@ -123,7 +127,71 @@ describe('FoodItemController (HTTP)', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Validation Error');
     });
+
+    it('paginates results according to page and limit', async () => {
+      for (let i = 0; i < 25; i += 1) {
+        await seedFoodItem(repo, {
+          id: `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
+          name: `Item ${i}`,
+          bestBefore: new Date(Date.now() + i * 86_400_000),
+        });
+      }
+
+      const page1 = await request(app).get('/api/v1/food-items').query({ page: 1, limit: 10 });
+      expect(page1.status).toBe(200);
+      expect(page1.body.data).toHaveLength(10);
+      expect(page1.body.total).toBe(25);
+      expect(page1.body.page).toBe(1);
+      expect(page1.body.limit).toBe(10);
+
+      const page3 = await request(app).get('/api/v1/food-items').query({ page: 3, limit: 10 });
+      expect(page3.status).toBe(200);
+      expect(page3.body.data).toHaveLength(5);
+      expect(page3.body.total).toBe(25);
+      expect(page3.body.page).toBe(3);
+    });
+
+    it('combines pagination with filters, reporting a filtered total', async () => {
+      await seedFoodItem(repo, {
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'Milk',
+        location: 'FRIDGE',
+      });
+      await seedFoodItem(repo, {
+        id: '22222222-2222-2222-2222-222222222222',
+        name: 'Peas',
+        location: 'FREEZER',
+      });
+      await seedFoodItem(repo, {
+        id: '33333333-3333-3333-3333-333333333333',
+        name: 'Corn',
+        location: 'FREEZER',
+      });
+
+      const res = await request(app)
+        .get('/api/v1/food-items')
+        .query({ location: 'FREEZER', page: 1, limit: 1 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.total).toBe(2);
+    });
+
+    it('returns 400 when limit exceeds the maximum', async () => {
+      const res = await request(app).get('/api/v1/food-items').query({ limit: 1000 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation Error');
+    });
+
+    it('returns 400 when page is not a positive integer', async () => {
+      const res = await request(app).get('/api/v1/food-items').query({ page: 0 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation Error');
+    });
   });
+
 
   describe('GET /api/v1/food-items/:id', () => {
     it('returns the item when found', async () => {

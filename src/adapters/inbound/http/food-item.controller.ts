@@ -5,6 +5,7 @@ import {
   UpdateFoodItemSchema,
   FoodItemFilterSchema,
 } from '../../../core/domain/food-item.js';
+import { PaginationSchema } from '../../../core/domain/pagination.js';
 
 export class FoodItemController {
   constructor(private readonly service: FoodItemServicePort) {}
@@ -31,8 +32,9 @@ export class FoodItemController {
   listItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const filter = FoodItemFilterSchema.parse(req.query);
-      const items = await this.service.listItems(filter);
-      res.json(items);
+      const pagination = PaginationSchema.parse(req.query);
+      const result = await this.service.listItemsPaginated(filter, pagination);
+      res.json(result);
     } catch (err) {
       next(err);
     }

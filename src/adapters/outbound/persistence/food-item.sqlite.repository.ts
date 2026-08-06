@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../../core/domain/food-item.js';
+import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
 
 interface FoodItemRow {
@@ -45,6 +46,27 @@ function rowToFoodItem(row: FoodItemRow): FoodItem {
   };
 }
 
+function buildWhereClause(filter?: FoodItemFilter): { where: string; params: Record<string, string> } {
+  const conditions: string[] = [];
+  const params: Record<string, string> = {};
+
+  if (filter?.location) {
+    conditions.push('location = @location');
+    params.location = filter.location;
+  }
+  if (filter?.category) {
+    conditions.push('category = @category');
+    params.category = filter.category;
+  }
+  if (filter?.name) {
+    conditions.push('name LIKE @name');
+    params.name = `%${filter.name}%`;
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  return { where, params };
+}
+
 export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
   private readonly db: Database.Database;
 
@@ -83,28 +105,31 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
   }
 
   async findAll(filter?: FoodItemFilter): Promise<FoodItem[]> {
-    const conditions: string[] = [];
-    const params: Record<string, string> = {};
-
-    if (filter?.location) {
-      conditions.push('location = @location');
-      params.location = filter.location;
-    }
-    if (filter?.category) {
-      conditions.push('category = @category');
-      params.category = filter.category;
-    }
-    if (filter?.name) {
-      conditions.push('name LIKE @name');
-      params.name = `%${filter.name}%`;
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { where, params } = buildWhereClause(filter);
     const rows = this.db
       .prepare(`SELECT * FROM food_items ${where} ORDER BY best_before ASC`)
       .all(params) as FoodItemRow[];
 
     return rows.map(rowToFoodItem);
+  }
+
+  async findAllPaginated(
+    filter: FoodItemFilter,
+    pagination: PaginationInput,
+  ): Promise<PaginatedResult<FoodItem>> {
+    const { where, params } = buildWhereClause(filter);
+
+    const { count } = this.db
+      .prepare(`SELECT COUNT(*) as count FROM food_items ${where}`)
+      .get(params) as { count: number };
+
+    const { page, limit } = pagination;
+    const offset = (page - 1) * limit;
+    const rows = this.db
+      .prepare(`SELECT * FROM food_items ${where} ORDER BY best_before ASC LIMIT @limit OFFSET @offset`)
+      .all({ ...params, limit, offset }) as FoodItemRow[];
+
+    return { data: rows.map(rowToFoodItem), total: count, page, limit };
   }
 
   async update(id: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {

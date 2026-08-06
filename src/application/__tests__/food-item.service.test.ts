@@ -21,6 +21,7 @@ function makeMockRepository(): FoodItemRepositoryPort {
     save: vi.fn(),
     findById: vi.fn(),
     findAll: vi.fn(),
+    findAllPaginated: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   };
@@ -80,6 +81,18 @@ describe('FoodItemService', () => {
     it('throws NotFoundError when item does not exist', async () => {
       vi.mocked(repo.delete).mockResolvedValue(false);
       await expect(service.removeItem('missing-id')).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe('listItemsPaginated', () => {
+    it('delegates to the repository and returns its result', async () => {
+      const expected = { data: [makeItem()], total: 1, page: 1, limit: 20 };
+      vi.mocked(repo.findAllPaginated).mockResolvedValue(expected);
+
+      const result = await service.listItemsPaginated({}, { page: 1, limit: 20 });
+
+      expect(repo.findAllPaginated).toHaveBeenCalledWith({}, { page: 1, limit: 20 });
+      expect(result).toEqual(expected);
     });
   });
 });
