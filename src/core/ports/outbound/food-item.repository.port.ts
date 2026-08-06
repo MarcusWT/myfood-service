@@ -1,4 +1,4 @@
-import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter } from '../../domain/food-item.js';
+import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../domain/food-item.js';
 
 export interface FoodItemRepositoryPort {
   save(item: FoodItem): Promise<FoodItem>;
