@@ -2,8 +2,12 @@ import path from 'path';
 import fs from 'fs';
 import { config } from './config.js';
 
+// Ports
+import type { FoodItemRepositoryPort } from './core/ports/outbound/food-item.repository.port.js';
+
 // Outbound adapters
 import { SqliteFoodItemRepository } from './adapters/outbound/persistence/food-item.sqlite.repository.js';
+import { InMemoryFoodItemRepository } from './adapters/outbound/persistence/food-item.in-memory.repository.js';
 import { SpoonacularRecipeAdapter } from './adapters/outbound/recipe-provider/spoonacular.adapter.js';
 
 // Application services
@@ -19,12 +23,17 @@ import { RecipeController } from './adapters/inbound/http/recipe.controller.js';
 import { ShoppingSummaryController } from './adapters/inbound/http/shopping-summary.controller.js';
 import { createApp } from './adapters/inbound/http/app.js';
 
-// Ensure data directory exists
-const dataDir = path.dirname(config.dbPath);
-fs.mkdirSync(dataDir, { recursive: true });
+// Ensure data directory exists (not applicable for the in-memory repository)
+if (config.dbPath !== ':memory:') {
+  const dataDir = path.dirname(config.dbPath);
+  fs.mkdirSync(dataDir, { recursive: true });
+}
 
 // Wire up the hexagon
-const foodItemRepository = new SqliteFoodItemRepository(config.dbPath);
+const foodItemRepository: FoodItemRepositoryPort =
+  config.dbPath === ':memory:'
+    ? new InMemoryFoodItemRepository()
+    : new SqliteFoodItemRepository(config.dbPath);
 const recipeProvider = new SpoonacularRecipeAdapter(config.spoonacularApiKey);
 
 const foodItemService = new FoodItemService(foodItemRepository);
