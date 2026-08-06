@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import { createRouter } from './router.js';
 import { errorHandler } from './error-handler.js';
+import { requestLogger } from './request-logger.middleware.js';
 import { FoodItemController } from './food-item.controller.js';
 import { ExpiryAlertController } from './expiry-alert.controller.js';
 import { RecipeController } from './recipe.controller.js';
@@ -14,6 +15,7 @@ export function createApp(
 ): Application {
   const app = express();
 
+  app.use(requestLogger);
   app.use(express.json());
 
   app.get('/health', (_req, res) => {

@@ -47,13 +47,13 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 ---
 
-## 5. Request Logging Middleware
+## 5. Request Logging Middleware — ✅ Done
 
 **Why:** Essential for observability even in early-stage services.
 
-- Add `morgan` (or a lightweight custom middleware) for structured HTTP request logging
-- Log method, path, status code, and response time
-- Suppress logs in `test` environment
+- [x] Add `morgan` (or a lightweight custom middleware) for structured HTTP request logging
+- [x] Log method, path, status code, and response time
+- [x] Suppress logs in `test` environment
 
 ---
 
