@@ -1,4 +1,5 @@
 import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../../core/domain/food-item.js';
+import { Location } from '../../../core/domain/value-objects.js';
 import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
 
@@ -59,6 +60,21 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
     const data = results.slice(start, start + limit).map(clone);
 
     return { data, total, page, limit };
+  }
+
+  async findByNameAndLocation(
+    name: string,
+    location: Location,
+    excludeId?: string,
+  ): Promise<FoodItem | null> {
+    const needle = name.toLowerCase();
+    const match = Array.from(this.items.values()).find(
+      (item) =>
+        item.name.toLowerCase() === needle &&
+        item.location === location &&
+        item.id !== excludeId,
+    );
+    return match ? clone(match) : null;
   }
 
   async update(id: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {

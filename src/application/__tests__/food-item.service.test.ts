@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FoodItemService, NotFoundError } from '../food-item.service.js';
+import { FoodItemService, NotFoundError, ConflictError } from '../food-item.service.js';
 import type { FoodItemRepositoryPort } from '../../core/ports/outbound/food-item.repository.port.js';
 import type { FoodItem } from '../../core/domain/food-item.js';
 
@@ -22,6 +22,7 @@ function makeMockRepository(): FoodItemRepositoryPort {
     findById: vi.fn(),
     findAll: vi.fn(),
     findAllPaginated: vi.fn(),
+    findByNameAndLocation: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   };
@@ -47,12 +48,28 @@ describe('FoodItemService', () => {
         bestBefore: new Date('2026-09-01'),
       };
       const expected = makeItem();
+      vi.mocked(repo.findByNameAndLocation).mockResolvedValue(null);
       vi.mocked(repo.save).mockResolvedValue(expected);
 
       const result = await service.addItem(input);
 
       expect(repo.save).toHaveBeenCalledOnce();
       expect(result).toEqual(expected);
+    });
+
+    it('throws ConflictError when an item with the same name already exists in the location', async () => {
+      const input = {
+        name: 'Eggs',
+        quantity: 12,
+        unit: 'UNITS' as const,
+        location: 'FRIDGE' as const,
+        category: 'OTHER' as const,
+        bestBefore: new Date('2026-09-01'),
+      };
+      vi.mocked(repo.findByNameAndLocation).mockResolvedValue(makeItem());
+
+      await expect(service.addItem(input)).rejects.toThrow(ConflictError);
+      expect(repo.save).not.toHaveBeenCalled();
     });
   });
 
@@ -69,6 +86,50 @@ describe('FoodItemService', () => {
       vi.mocked(repo.findById).mockResolvedValue(null);
 
       await expect(service.getItem('missing-id')).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe('updateItem', () => {
+    it('throws NotFoundError when item does not exist', async () => {
+      vi.mocked(repo.findById).mockResolvedValue(null);
+
+      await expect(service.updateItem('missing-id', { quantity: 5 })).rejects.toThrow(
+        NotFoundError,
+      );
+    });
+
+    it('updates when name/location are unchanged', async () => {
+      const existing = makeItem();
+      vi.mocked(repo.findById).mockResolvedValue(existing);
+      vi.mocked(repo.update).mockResolvedValue({ ...existing, quantity: 3 });
+
+      const result = await service.updateItem(existing.id, { quantity: 3 });
+
+      expect(repo.findByNameAndLocation).not.toHaveBeenCalled();
+      expect(result.quantity).toBe(3);
+    });
+
+    it('checks for conflicts when name changes and throws ConflictError on collision', async () => {
+      const existing = makeItem();
+      vi.mocked(repo.findById).mockResolvedValue(existing);
+      vi.mocked(repo.findByNameAndLocation).mockResolvedValue(makeItem({ id: 'other-id' }));
+
+      await expect(service.updateItem(existing.id, { name: 'Milk' })).rejects.toThrow(
+        ConflictError,
+      );
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('allows update when no conflicting item is found', async () => {
+      const existing = makeItem();
+      vi.mocked(repo.findById).mockResolvedValue(existing);
+      vi.mocked(repo.findByNameAndLocation).mockResolvedValue(null);
+      vi.mocked(repo.update).mockResolvedValue({ ...existing, name: 'Milk' });
+
+      const result = await service.updateItem(existing.id, { name: 'Milk' });
+
+      expect(repo.findByNameAndLocation).toHaveBeenCalledWith('Milk', existing.location, existing.id);
+      expect(result.name).toBe('Milk');
     });
   });
 

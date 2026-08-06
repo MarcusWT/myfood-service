@@ -65,6 +65,54 @@ describe('FoodItemController (HTTP)', () => {
 
       expect(res.status).toBe(400);
     });
+
+    it('returns 400 when bestBefore is in the past', async () => {
+      const res = await request(app)
+        .post('/api/v1/food-items')
+        .send(makeCreateFoodItemInput({ bestBefore: '2020-01-01T00:00:00.000Z' }));
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation Error');
+    });
+
+    it('returns 400 when quantity exceeds the maximum', async () => {
+      const res = await request(app)
+        .post('/api/v1/food-items')
+        .send(makeCreateFoodItemInput({ quantity: 200_000 }));
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation Error');
+    });
+
+    it('trims leading/trailing whitespace from name', async () => {
+      const res = await request(app)
+        .post('/api/v1/food-items')
+        .send(makeCreateFoodItemInput({ name: '  Eggs  ' }));
+
+      expect(res.status).toBe(201);
+      expect(res.body.name).toBe('Eggs');
+    });
+
+    it('returns 409 when an item with the same name already exists in the same location', async () => {
+      await request(app).post('/api/v1/food-items').send(makeCreateFoodItemInput({ name: 'Eggs', location: 'FRIDGE' }));
+
+      const res = await request(app)
+        .post('/api/v1/food-items')
+        .send(makeCreateFoodItemInput({ name: 'eggs', location: 'FRIDGE' }));
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toEqual(expect.any(String));
+    });
+
+    it('allows the same name in a different location', async () => {
+      await request(app).post('/api/v1/food-items').send(makeCreateFoodItemInput({ name: 'Eggs', location: 'FRIDGE' }));
+
+      const res = await request(app)
+        .post('/api/v1/food-items')
+        .send(makeCreateFoodItemInput({ name: 'Eggs', location: 'PANTRY' }));
+
+      expect(res.status).toBe(201);
+    });
   });
 
   describe('GET /api/v1/food-items', () => {
@@ -242,6 +290,51 @@ describe('FoodItemController (HTTP)', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Validation Error');
+    });
+
+    it('returns 400 when bestBefore is updated to a past date', async () => {
+      const item = await seedFoodItem(repo);
+
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${item.id}`)
+        .send({ bestBefore: '2020-01-01T00:00:00.000Z' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation Error');
+    });
+
+    it('does not conflict when updating a field other than name/location on an item that already has that name', async () => {
+      const item = await seedFoodItem(repo, {
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'Milk',
+        location: 'FRIDGE',
+      });
+
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${item.id}`)
+        .send({ quantity: 3 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.quantity).toBe(3);
+    });
+
+    it('returns 409 when renaming an item to collide with another item in the same location', async () => {
+      await seedFoodItem(repo, {
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'Milk',
+        location: 'FRIDGE',
+      });
+      const cheese = await seedFoodItem(repo, {
+        id: '22222222-2222-2222-2222-222222222222',
+        name: 'Cheese',
+        location: 'FRIDGE',
+      });
+
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${cheese.id}`)
+        .send({ name: 'milk' });
+
+      expect(res.status).toBe(409);
     });
   });
 

@@ -157,6 +157,31 @@ describe('InMemoryFoodItemRepository', () => {
     });
   });
 
+  describe('findByNameAndLocation', () => {
+    it('finds a case-insensitive match in the same location', async () => {
+      const item = makeItem({ name: 'Eggs', location: 'FRIDGE' });
+      await repo.save(item);
+
+      const found = await repo.findByNameAndLocation('eggs', 'FRIDGE');
+      expect(found?.id).toBe(item.id);
+    });
+
+    it('returns null when the name matches but the location differs', async () => {
+      await repo.save(makeItem({ name: 'Eggs', location: 'FRIDGE' }));
+
+      const found = await repo.findByNameAndLocation('Eggs', 'PANTRY');
+      expect(found).toBeNull();
+    });
+
+    it('excludes the given id', async () => {
+      const item = makeItem({ name: 'Eggs', location: 'FRIDGE' });
+      await repo.save(item);
+
+      const found = await repo.findByNameAndLocation('Eggs', 'FRIDGE', item.id);
+      expect(found).toBeNull();
+    });
+  });
+
   describe('update', () => {
     it('merges the input into the existing item and bumps updatedAt', async () => {
       const item = makeItem();

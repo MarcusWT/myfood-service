@@ -57,14 +57,14 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 ---
 
-## 6. Input Sanitisation & Stricter Validation
+## 6. Input Sanitisation & Stricter Validation — ✅ Done
 
 **Why:** Current Zod schemas are functional but minimal.
 
-- Enforce `bestBefore` must be a future date on creation
-- Normalise `name` input (trim whitespace, prevent duplicates in the same location)
-- Add maximum `quantity` bounds
-- Return structured error responses consistently (currently mixing Zod shape with manual messages)
+- [x] Enforce `bestBefore` must be a future date on creation (also enforced on update when `bestBefore` is included in the partial payload)
+- [x] Normalise `name` input (trim whitespace via `.trim()` transform, same for `notes`; prevent duplicates (case-insensitive) in the same location via new `findByNameAndLocation` repository method + `ConflictError` → 409)
+- [x] Add maximum `quantity` bounds (100,000)
+- [x] Return structured error responses consistently (`ZodError` → 400, `NotFoundError` → 404, new `ConflictError` → 409, all as `{ error, details? }`)
 
 ---
 

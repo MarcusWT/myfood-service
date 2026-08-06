@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../../core/domain/food-item.js';
+import { Location } from '../../../core/domain/value-objects.js';
 import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
 
@@ -130,6 +131,20 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
       .all({ ...params, limit, offset }) as FoodItemRow[];
 
     return { data: rows.map(rowToFoodItem), total: count, page, limit };
+  }
+
+  async findByNameAndLocation(
+    name: string,
+    location: Location,
+    excludeId?: string,
+  ): Promise<FoodItem | null> {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM food_items
+         WHERE lower(name) = lower(@name) AND location = @location AND id != @excludeId`,
+      )
+      .get({ name, location, excludeId: excludeId ?? '' }) as FoodItemRow | undefined;
+    return row ? rowToFoodItem(row) : null;
   }
 
   async update(id: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {

@@ -11,10 +11,24 @@ export class NotFoundError extends Error {
   }
 }
 
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
 export class FoodItemService implements FoodItemServicePort {
   constructor(private readonly repository: FoodItemRepositoryPort) {}
 
   async addItem(input: CreateFoodItemInput): Promise<FoodItem> {
+    const existing = await this.repository.findByNameAndLocation(input.name, input.location);
+    if (existing) {
+      throw new ConflictError(
+        `An item named '${input.name}' already exists in ${input.location}`,
+      );
+    }
+
     const now = new Date();
     const item: FoodItem = {
       ...input,
@@ -45,6 +59,26 @@ export class FoodItemService implements FoodItemServicePort {
   }
 
   async updateItem(id: string, input: UpdateFoodItemInput): Promise<FoodItem> {
+    const existing = await this.repository.findById(id);
+    if (!existing) {
+      throw new NotFoundError(`Food item with id '${id}' not found`);
+    }
+
+    if (input.name !== undefined || input.location !== undefined) {
+      const effectiveName = input.name ?? existing.name;
+      const effectiveLocation = input.location ?? existing.location;
+      const conflict = await this.repository.findByNameAndLocation(
+        effectiveName,
+        effectiveLocation,
+        id,
+      );
+      if (conflict) {
+        throw new ConflictError(
+          `An item named '${effectiveName}' already exists in ${effectiveLocation}`,
+        );
+      }
+    }
+
     const updated = await this.repository.update(id, input);
     if (!updated) {
       throw new NotFoundError(`Food item with id '${id}' not found`);
