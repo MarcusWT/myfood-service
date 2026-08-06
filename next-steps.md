@@ -4,35 +4,35 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 ---
 
-## 1. Developer Experience & Local Setup
+## 1. Developer Experience & Local Setup — ✅ Done
 
 **Why first:** Unblocks all further development and testing.
 
-- Add `dotenv` support so `.env` is loaded automatically in dev (`npm run dev`)
-- Add a `data/` directory placeholder (`.gitkeep`) and ensure `data/` is in `.gitignore`
-- Add `nodemon` or confirm `tsx watch` restarts cleanly on all file changes
-- Add a `lint` script with `eslint` + `@typescript-eslint` rules and fix any violations
+- [x] Add `dotenv` support so `.env` is loaded automatically in dev (`npm run dev`)
+- [x] Add a `data/` directory placeholder (`.gitkeep`) and ensure `data/` is in `.gitignore`
+- [x] Add `nodemon` or confirm `tsx watch` restarts cleanly on all file changes (`tsx watch` in use, confirmed working)
+- [x] Add a `lint` script with `eslint` + `@typescript-eslint` rules and fix any violations
 
 ---
 
-## 2. In-Memory Repository for Testing
+## 2. In-Memory Repository for Testing — ✅ Done
 
 **Why:** The `SqliteFoodItemRepository` writes to disk, making integration tests slow and stateful. An in-memory adapter implementing `FoodItemRepositoryPort` enables fast, isolated tests for application services and controllers.
 
-- Implement `InMemoryFoodItemRepository` in `src/adapters/outbound/persistence/`
-- Use it in all integration and end-to-end tests
-- Use it as a fallback when `DB_PATH=:memory:` is set
+- [x] Implement `InMemoryFoodItemRepository` in `src/adapters/outbound/persistence/`
+- [x] Use it in all integration and end-to-end tests
+- [x] Use it as a fallback when `DB_PATH=:memory:` is set
 
 ---
 
-## 3. Integration & Controller Tests
+## 3. Integration & Controller Tests — ✅ Done
 
 **Why:** Current tests only cover domain logic and unit-level service behaviour. HTTP layer is untested.
 
-- Add `supertest` for HTTP-level integration tests
-- Test all `FoodItemController` routes (happy path + validation errors + not found)
-- Test `ExpiryAlertController`, `RecipeController`, `ShoppingSummaryController`
-- Mock outbound adapters (repository, recipe provider) using the in-memory adapter
+- [x] Add `supertest` for HTTP-level integration tests
+- [x] Test all `FoodItemController` routes (happy path + validation errors + not found)
+- [x] Test `ExpiryAlertController`, `RecipeController`, `ShoppingSummaryController`
+- [x] Mock outbound adapters (repository, recipe provider) using the in-memory adapter
 
 ---
 
