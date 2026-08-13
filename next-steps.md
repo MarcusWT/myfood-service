@@ -99,13 +99,13 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 ---
 
-## 10. OpenAPI / Swagger Documentation
+## 10. OpenAPI / Swagger Documentation — ✅ Done
 
 **Why:** Makes the API self-documenting and consumable by frontend clients or API testing tools.
 
-- Add `zod-to-openapi` or `swagger-jsdoc` to generate an OpenAPI 3.0 spec
-- Serve Swagger UI at `/api/docs`
-- Keep the spec generated from the existing Zod schemas to avoid drift
+- [x] Add `@asteasolutions/zod-to-openapi` to generate an OpenAPI 3.0 spec from existing Zod schemas (`src/adapters/inbound/http/openapi/registry.ts` registers all 9 routes plus shared error/response component schemas; `spec.ts` generates and caches the document)
+- [x] Serve Swagger UI at `/api/docs` (via `swagger-ui-express`, wired in `app.ts`), backed by a raw spec at `/api/docs.json`
+- [x] Spec is generated directly from the domain Zod schemas (`FoodItemSchema`, `CreateFoodItemSchema`, `UpdateFoodItemSchema`, controller query schemas) — no hand-written duplicate spec, so it can't drift. `.openapi()` annotation calls are confined to the new `openapi/` adapter module, keeping `core/domain` free of infrastructure imports
 
 ---
 

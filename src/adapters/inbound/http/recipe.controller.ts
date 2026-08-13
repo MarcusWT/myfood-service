@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { RecipeServicePort } from '../../../core/ports/inbound/recipe.service.port.js';
 
-const RecipeQuerySchema = z.object({
+export const RecipeQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(20).optional(),
 });
 

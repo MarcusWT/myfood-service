@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { ExpiryAlertServicePort } from '../../../core/ports/inbound/expiry-alert.service.port.js';
 
-const AlertQuerySchema = z.object({
+export const AlertQuerySchema = z.object({
   withinDays: z.coerce.number().int().positive().optional(),
 });
 
