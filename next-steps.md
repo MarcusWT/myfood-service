@@ -89,13 +89,13 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 ---
 
-## 9. Notifications / Alert Polling
+## 9. Notifications / Alert Polling — ✅ Done
 
 **Why:** Expiry alerts are only visible on-demand via `GET /alerts/expiry`. A proactive mechanism provides real value.
 
-- Add a background job (using `node:timers` `setInterval` or a lightweight scheduler) that checks for expiring items on a configurable interval
-- Log alerts to stdout as a starting point
-- Design the notifier as an outbound port (`NotificationPort`) so email/push/webhook adapters can be added later
+- [x] Add a background job (`NotificationPoller` in `src/application/notification-poller.ts`, using `setInterval`) that checks for expiring items on a configurable interval (`NOTIFICATION_POLL_INTERVAL_MS`, default 1h); disabled in `test` env, started/stopped in `src/index.ts` with `SIGTERM`/`SIGINT` handlers for graceful shutdown
+- [x] Log alerts to stdout as a starting point (`ConsoleNotificationAdapter` in `src/adapters/outbound/notification/`)
+- [x] Design the notifier as an outbound port (`NotificationPort` in `src/core/ports/outbound/notification.port.ts`) so email/push/webhook adapters can be added later
 
 ---
 

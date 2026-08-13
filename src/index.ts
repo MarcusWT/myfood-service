@@ -9,12 +9,14 @@ import type { FoodItemRepositoryPort } from './core/ports/outbound/food-item.rep
 import { SqliteFoodItemRepository } from './adapters/outbound/persistence/food-item.sqlite.repository.js';
 import { InMemoryFoodItemRepository } from './adapters/outbound/persistence/food-item.in-memory.repository.js';
 import { SpoonacularRecipeAdapter } from './adapters/outbound/recipe-provider/spoonacular.adapter.js';
+import { ConsoleNotificationAdapter } from './adapters/outbound/notification/console-notification.adapter.js';
 
 // Application services
 import { FoodItemService } from './application/food-item.service.js';
 import { ExpiryAlertService } from './application/expiry-alert.service.js';
 import { RecipeService } from './application/recipe.service.js';
 import { ShoppingSummaryService } from './application/shopping-summary.service.js';
+import { NotificationPoller } from './application/notification-poller.js';
 
 // Inbound adapters (HTTP)
 import { FoodItemController } from './adapters/inbound/http/food-item.controller.js';
@@ -52,6 +54,21 @@ const app = createApp(
   recipeController,
   shoppingSummaryController,
 );
+
+const notificationPort = new ConsoleNotificationAdapter();
+const notificationPoller = new NotificationPoller(
+  expiryAlertService,
+  notificationPort,
+  config.notificationPollIntervalMs,
+  config.notificationWithinDays,
+);
+
+if (config.nodeEnv !== 'test') {
+  notificationPoller.start();
+}
+
+process.on('SIGTERM', () => notificationPoller.stop());
+process.on('SIGINT', () => notificationPoller.stop());
 
 app.listen(config.port, () => {
   console.log(`[MYFood Service] Listening on port ${config.port}`);
