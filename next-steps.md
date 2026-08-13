@@ -68,13 +68,13 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 ---
 
-## 7. Recipe Enrichment
+## 7. Recipe Enrichment — ✅ Done
 
 **Why:** The Spoonacular `findByIngredients` endpoint does not return `readyInMinutes` or `servings`. These are set to `0` in the current adapter.
 
-- Call the Spoonacular `/recipes/{id}/information` endpoint to enrich results
-- Cache enriched results (in-memory TTL cache) to avoid redundant API calls and stay within rate limits
-- Consider a circuit-breaker or graceful degradation if the Spoonacular API is unavailable
+- [x] Call the Spoonacular `/recipes/{id}/information` endpoint to enrich results (`enrichAll`/`enrichOne` in `SpoonacularRecipeAdapter`, run concurrently via `Promise.allSettled`)
+- [x] Cache enriched results (in-memory TTL cache) to avoid redundant API calls and stay within rate limits (`TtlCache` in `src/adapters/outbound/recipe-provider/ttl-cache.ts`, 6h default TTL)
+- [x] Consider a circuit-breaker or graceful degradation if the Spoonacular API is unavailable (per-request 5s timeout via `AbortSignal.timeout`; failures degrade to `readyInMinutes: 0, servings: 0` without throwing; lightweight circuit breaker opens for 60s after 3 consecutive enrichment failures)
 
 ---
 
