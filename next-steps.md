@@ -2,6 +2,10 @@
 
 Priority-ordered backlog of improvements and missing pieces following the initial implementation.
 
+Items 1–10 are complete. Items 11–12 were already identified but are expanded below with concrete
+implementation notes; items 13–17 are new additions surfaced by reviewing the current state of the
+codebase (see individual "Why" sections for the specific gaps observed).
+
 ---
 
 ## 1. Developer Experience & Local Setup — ✅ Done
@@ -113,9 +117,12 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 **Why:** The API is currently open with no concept of users. Needed before any public or multi-user deployment.
 
-- Add JWT-based authentication middleware
-- Scope food items to a `userId` so multiple users can maintain separate inventories
-- Consider API key auth as a simpler alternative for single-user self-hosted deployments
+- Add JWT-based authentication middleware (e.g. `jsonwebtoken` + a new `AuthPort`/`AuthService` following the existing hexagonal pattern — keep token verification out of `core/domain`)
+- Add a `users` table/repository and a login/register flow (or defer to an external identity provider if this is ever exposed beyond self-hosting)
+- Scope food items to a `userId`: add `userId` to the `FoodItem` domain type, thread it through `FoodItemRepositoryPort` methods (`findAll`, `findAllPaginated`, `findById`, `findByNameAndLocation`), and add a `user_id` column + index to the SQLite schema (with the same `PRAGMA table_info` + `ALTER TABLE` migration guard used for `minimum_quantity`)
+- Update `InMemoryFoodItemRepository` to filter by `userId` too, so integration tests stay accurate
+- Consider API key auth (a simple `X-API-Key` header checked against an env-configured value) as a lower-effort alternative for single-user self-hosted deployments, with JWT as an optional upgrade path
+- Update the OpenAPI registry with a `securityScheme` and mark routes as requiring auth once implemented
 
 ---
 
@@ -123,6 +130,58 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 **Why:** Ensures consistent runtime across environments and simplifies deployment.
 
-- Add a `Dockerfile` (multi-stage: build → production image)
-- Add a `docker-compose.yml` for local development
-- Document container usage in `README.md`
+- Add a `Dockerfile` (multi-stage: `node:24` build stage running `npm ci && npm run build`, slim production stage copying only `dist/`, `node_modules` (production-only), and `package.json`)
+- Add a `docker-compose.yml` for local development, mounting `./data` as a volume so the SQLite file persists across container restarts, and reading env vars from `.env`
+- Add a `.dockerignore` (`node_modules`, `dist`, `data`, `.env`, test files)
+- Document container usage in `README.md` and cross-reference from `docs/dev/developer-guide.md`
+- Consider a `docker-compose.yml` `healthcheck` against `GET /health` once that endpoint exists (see item 15)
+
+---
+
+## 13. Deeper Readiness Check
+
+**Why:** `GET /health` already exists (`src/adapters/inbound/http/app.ts`) and returns a static `{ status, service, timestamp }` payload, which is enough for a basic liveness probe but doesn't verify the database connection is actually usable.
+
+- Add a `GET /health/ready` (or extend `/health` with a `?deep=true` flag) that runs a trivial `SELECT 1` against the SQLite connection and reports `503` if it fails
+- Useful once containerised (item 12) for a Docker/`docker-compose` healthcheck, and later for k8s readiness probes
+- Exclude `/health` from request logging noise (or log at a lower verbosity) once it starts being polled frequently by orchestrators
+
+---
+
+## 14. Structured / Leveled Logging
+
+**Why:** `morgan` covers HTTP access logs, but application-level logs (config warnings, notification poller, Spoonacular circuit breaker events) currently use raw `console.log`/`console.warn` with inconsistent formatting.
+
+- Introduce a lightweight structured logger (e.g. `pino`) as a cross-cutting concern, or a small internal wrapper if a new dependency isn't wanted
+- Replace ad-hoc `console.*` calls in `src/config.ts`, `notification-poller.ts`, and `spoonacular.adapter.ts` with the shared logger
+- Support a `LOG_LEVEL` env var and ensure `test` env stays quiet (mirroring the existing morgan suppression)
+
+---
+
+## 15. Rate Limiting & Basic Hardening
+
+**Why:** The API has no protection against abusive clients, and this becomes more important once auth (item 11) makes per-user resource usage meaningful.
+
+- Add `express-rate-limit` (or similar) on all routes, with a stricter limit on `/recipes/suggestions` since it proxies to the metered Spoonacular API
+- Add `helmet` for standard security headers
+- Add a request body size limit (Express `json({ limit: ... })`) to guard against oversized payloads
+
+---
+
+## 16. CI Pipeline
+
+**Why:** `lint`, `typecheck`, and `test` all exist as scripts but nothing currently runs them automatically on push/PR.
+
+- Add a GitHub Actions workflow (`.github/workflows/ci.yml`) running `npm ci`, `npm run lint`, `npm run typecheck`, and `npm test` on Node 24
+- Optionally upload `vitest` coverage as a build artifact or badge
+- Gate merges on this workflow passing once the repository has a hosted remote with branch protection
+
+---
+
+## 17. Database Migration Strategy
+
+**Why:** Schema changes so far (`minimum_quantity` in item 8, and the prospective `user_id` in item 11) have been handled with ad-hoc `PRAGMA table_info` + `ALTER TABLE` guards directly in `SqliteFoodItemRepository`. This works but doesn't scale and has no rollback story.
+
+- Evaluate a lightweight migration tool compatible with `better-sqlite3` (e.g. a hand-rolled numbered-migrations runner, or a library) rather than continuing to grow ad-hoc guards
+- Track applied migrations in a `schema_migrations` table
+- Keep the existing in-place guards working for upgrades from current on-disk databases, or provide a one-time migration bridging them into the new system
