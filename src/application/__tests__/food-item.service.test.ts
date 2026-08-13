@@ -71,6 +71,24 @@ describe('FoodItemService', () => {
       await expect(service.addItem(input)).rejects.toThrow(ConflictError);
       expect(repo.save).not.toHaveBeenCalled();
     });
+
+    it('passes minimumQuantity through to the repository when provided', async () => {
+      const input = {
+        name: 'Eggs',
+        quantity: 12,
+        minimumQuantity: 6,
+        unit: 'UNITS' as const,
+        location: 'FRIDGE' as const,
+        category: 'OTHER' as const,
+        bestBefore: new Date('2026-09-01'),
+      };
+      vi.mocked(repo.findByNameAndLocation).mockResolvedValue(null);
+      vi.mocked(repo.save).mockImplementation(async (item) => item);
+
+      const result = await service.addItem(input);
+
+      expect(result.minimumQuantity).toBe(6);
+    });
   });
 
   describe('getItem', () => {

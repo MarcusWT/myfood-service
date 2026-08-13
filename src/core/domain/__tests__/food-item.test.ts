@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isExpired, isExpiringSoon, CreateFoodItemSchema, UpdateFoodItemSchema } from '../food-item.js';
+import {
+  isExpired,
+  isExpiringSoon,
+  isLowStock,
+  CreateFoodItemSchema,
+  UpdateFoodItemSchema,
+} from '../food-item.js';
 import type { FoodItem } from '../food-item.js';
 
 const baseItem: FoodItem = {
@@ -43,6 +49,21 @@ describe('isExpiringSoon', () => {
   });
 });
 
+describe('isLowStock', () => {
+  it('returns true when quantity is below minimumQuantity', () => {
+    expect(isLowStock({ ...baseItem, quantity: 1, minimumQuantity: 2 })).toBe(true);
+  });
+
+  it('returns false when quantity is at or above minimumQuantity', () => {
+    expect(isLowStock({ ...baseItem, quantity: 2, minimumQuantity: 2 })).toBe(false);
+    expect(isLowStock({ ...baseItem, quantity: 3, minimumQuantity: 2 })).toBe(false);
+  });
+
+  it('returns false when minimumQuantity is not set', () => {
+    expect(isLowStock({ ...baseItem, quantity: 0 })).toBe(false);
+  });
+});
+
 const validCreateInput = {
   name: 'Milk',
   quantity: 1,
@@ -75,6 +96,17 @@ describe('CreateFoodItemSchema', () => {
 
   it('accepts a valid input', () => {
     expect(() => CreateFoodItemSchema.parse(validCreateInput)).not.toThrow();
+  });
+
+  it('accepts an optional minimumQuantity', () => {
+    const result = CreateFoodItemSchema.parse({ ...validCreateInput, minimumQuantity: 2 });
+    expect(result.minimumQuantity).toBe(2);
+  });
+
+  it('rejects a negative minimumQuantity', () => {
+    expect(() =>
+      CreateFoodItemSchema.parse({ ...validCreateInput, minimumQuantity: -1 }),
+    ).toThrow();
   });
 });
 

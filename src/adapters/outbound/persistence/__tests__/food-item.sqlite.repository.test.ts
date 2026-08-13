@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import Database from 'better-sqlite3';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SqliteFoodItemRepository } from '../food-item.sqlite.repository.js';
 import type { FoodItem } from '../../../../core/domain/food-item.js';
 
@@ -108,6 +112,77 @@ describe('SqliteFoodItemRepository', () => {
 
       const found = await repo.findByNameAndLocation('Eggs', 'FRIDGE', item.id);
       expect(found).toBeNull();
+    });
+  });
+
+  describe('minimumQuantity', () => {
+    it('round-trips minimumQuantity through save and findById', async () => {
+      const item = makeItem({ minimumQuantity: 6 });
+      await repo.save(item);
+
+      const found = await repo.findById(item.id);
+      expect(found?.minimumQuantity).toBe(6);
+    });
+
+    it('stores undefined minimumQuantity as null and reads it back as undefined', async () => {
+      const item = makeItem();
+      await repo.save(item);
+
+      const found = await repo.findById(item.id);
+      expect(found?.minimumQuantity).toBeUndefined();
+    });
+
+    it('updates minimumQuantity', async () => {
+      const item = makeItem({ minimumQuantity: 6 });
+      await repo.save(item);
+
+      const updated = await repo.update(item.id, { minimumQuantity: 2 });
+      expect(updated?.minimumQuantity).toBe(2);
+
+      const found = await repo.findById(item.id);
+      expect(found?.minimumQuantity).toBe(2);
+    });
+  });
+
+  describe('schema migration', () => {
+    it('adds the minimum_quantity column to a pre-existing database missing it', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'myfood-service-test-'));
+      const path = join(dir, 'legacy.db');
+
+      try {
+        // Simulate an "old" on-disk database created before minimum_quantity existed.
+        const legacyDb = new Database(path);
+        legacyDb.exec(`
+          CREATE TABLE food_items (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            quantity    REAL NOT NULL,
+            unit        TEXT NOT NULL,
+            location    TEXT NOT NULL,
+            category    TEXT NOT NULL,
+            best_before TEXT NOT NULL,
+            added_at    TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            notes       TEXT
+          )
+        `);
+
+        const columnsBefore = legacyDb.prepare('PRAGMA table_info(food_items)').all() as {
+          name: string;
+        }[];
+        expect(columnsBefore.some((c) => c.name === 'minimum_quantity')).toBe(false);
+        legacyDb.close();
+
+        // Re-opening via SqliteFoodItemRepository must not throw and should add the column.
+        const migratedRepo = new SqliteFoodItemRepository(path);
+        const columnsAfter = new Database(path).prepare('PRAGMA table_info(food_items)').all() as {
+          name: string;
+        }[];
+        expect(columnsAfter.some((c) => c.name === 'minimum_quantity')).toBe(true);
+        migratedRepo.close();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

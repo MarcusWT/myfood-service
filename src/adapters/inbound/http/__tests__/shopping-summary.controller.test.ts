@@ -57,5 +57,29 @@ describe('ShoppingSummaryController (HTTP)', () => {
       expect(reasons).toContain('EXPIRED');
       expect(reasons).toContain('EXPIRING_SOON');
     });
+
+    it('includes items that are below their minimumQuantity as LOW_STOCK', async () => {
+      const farFuture = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+
+      await seedFoodItem(repo, {
+        id: '44444444-4444-4444-4444-444444444444',
+        name: 'Eggs',
+        category: 'OTHER',
+        quantity: 1,
+        minimumQuantity: 6,
+        bestBefore: farFuture,
+      });
+
+      const res = await request(app).get('/api/v1/shopping/summary');
+
+      expect(res.status).toBe(200);
+      expect(res.body.totalItems).toBe(1);
+      expect(res.body.byCategory.OTHER).toHaveLength(1);
+      expect(res.body.byCategory.OTHER[0]).toMatchObject({
+        name: 'Eggs',
+        reason: 'LOW_STOCK',
+        currentQuantity: 1,
+      });
+    });
   });
 });

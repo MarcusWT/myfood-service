@@ -78,13 +78,14 @@ Priority-ordered backlog of improvements and missing pieces following the initia
 
 ---
 
-## 8. Low-Stock Tracking
+## 8. Low-Stock Tracking — ✅ Done
 
 **Why:** The shopping summary currently only flags expiring items. Items that are simply running low (e.g., 1 egg left) are not surfaced.
 
-- Add a `minimumQuantity` field to `FoodItem` (optional, user-defined threshold)
-- Update `buildShoppingSummary` to include items below their minimum quantity
-- Add `LOW_STOCK` reason to `ShoppingItem`
+- [x] Add a `minimumQuantity` field to `FoodItem` (optional, user-defined threshold)
+- [x] Update `buildShoppingSummary` to include items below their minimum quantity (fixed a latent bug where the pre-filter on `bestBefore` made the `LOW_STOCK` branch unreachable; expiry reasons take precedence over `LOW_STOCK` when both apply)
+- [x] Add `LOW_STOCK` reason to `ShoppingItem` (the enum value already existed but was dead code; now reachable)
+- [x] SQLite adapter: added `minimum_quantity` column plus a `PRAGMA table_info` + `ALTER TABLE` guard so existing on-disk databases are migrated in place (no migration framework in this project)
 
 ---
 

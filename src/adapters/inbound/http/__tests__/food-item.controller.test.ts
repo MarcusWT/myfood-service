@@ -93,6 +93,24 @@ describe('FoodItemController (HTTP)', () => {
       expect(res.body.name).toBe('Eggs');
     });
 
+    it('accepts and returns an optional minimumQuantity', async () => {
+      const res = await request(app)
+        .post('/api/v1/food-items')
+        .send(makeCreateFoodItemInput({ minimumQuantity: 6 }));
+
+      expect(res.status).toBe(201);
+      expect(res.body.minimumQuantity).toBe(6);
+    });
+
+    it('returns 400 when minimumQuantity is negative', async () => {
+      const res = await request(app)
+        .post('/api/v1/food-items')
+        .send(makeCreateFoodItemInput({ minimumQuantity: -1 }));
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation Error');
+    });
+
     it('returns 409 when an item with the same name already exists in the same location', async () => {
       await request(app).post('/api/v1/food-items').send(makeCreateFoodItemInput({ name: 'Eggs', location: 'FRIDGE' }));
 
@@ -290,6 +308,17 @@ describe('FoodItemController (HTTP)', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Validation Error');
+    });
+
+    it('updates minimumQuantity', async () => {
+      const item = await seedFoodItem(repo);
+
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${item.id}`)
+        .send({ minimumQuantity: 3 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.minimumQuantity).toBe(3);
     });
 
     it('returns 400 when bestBefore is updated to a past date', async () => {

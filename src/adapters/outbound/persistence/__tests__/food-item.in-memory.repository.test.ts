@@ -199,6 +199,17 @@ describe('InMemoryFoodItemRepository', () => {
       const updated = await repo.update('missing-id', { quantity: 6 });
       expect(updated).toBeNull();
     });
+
+    it('round-trips minimumQuantity through save and update', async () => {
+      const item = makeItem({ minimumQuantity: 6 });
+      await repo.save(item);
+
+      const found = await repo.findById(item.id);
+      expect(found?.minimumQuantity).toBe(6);
+
+      const updated = await repo.update(item.id, { minimumQuantity: 2 });
+      expect(updated?.minimumQuantity).toBe(2);
+    });
   });
 
   describe('delete', () => {

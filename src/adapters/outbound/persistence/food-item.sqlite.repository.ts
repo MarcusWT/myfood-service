@@ -15,6 +15,7 @@ interface FoodItemRow {
   added_at: string;
   updated_at: string;
   notes: string | null;
+  minimum_quantity: number | null;
 }
 
 const CREATE_TABLE_SQL = `
@@ -28,7 +29,8 @@ const CREATE_TABLE_SQL = `
     best_before TEXT NOT NULL,
     added_at    TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
-    notes       TEXT
+    notes       TEXT,
+    minimum_quantity REAL
   )
 `;
 
@@ -44,6 +46,7 @@ function rowToFoodItem(row: FoodItemRow): FoodItem {
     addedAt: new Date(row.added_at),
     updatedAt: new Date(row.updated_at),
     notes: row.notes ?? undefined,
+    minimumQuantity: row.minimum_quantity ?? undefined,
   };
 }
 
@@ -75,13 +78,21 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.exec(CREATE_TABLE_SQL);
+    this.migrateAddMinimumQuantityColumn();
+  }
+
+  private migrateAddMinimumQuantityColumn(): void {
+    const columns = this.db.prepare('PRAGMA table_info(food_items)').all() as { name: string }[];
+    if (!columns.some((column) => column.name === 'minimum_quantity')) {
+      this.db.exec('ALTER TABLE food_items ADD COLUMN minimum_quantity REAL');
+    }
   }
 
   async save(item: FoodItem): Promise<FoodItem> {
     this.db
       .prepare(
-        `INSERT INTO food_items (id, name, quantity, unit, location, category, best_before, added_at, updated_at, notes)
-         VALUES (@id, @name, @quantity, @unit, @location, @category, @best_before, @added_at, @updated_at, @notes)`,
+        `INSERT INTO food_items (id, name, quantity, unit, location, category, best_before, added_at, updated_at, notes, minimum_quantity)
+         VALUES (@id, @name, @quantity, @unit, @location, @category, @best_before, @added_at, @updated_at, @notes, @minimum_quantity)`,
       )
       .run({
         id: item.id,
@@ -94,6 +105,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
         added_at: item.addedAt.toISOString(),
         updated_at: item.updatedAt.toISOString(),
         notes: item.notes ?? null,
+        minimum_quantity: item.minimumQuantity ?? null,
       });
     return item;
   }
@@ -161,7 +173,8 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
       .prepare(
         `UPDATE food_items
          SET name = @name, quantity = @quantity, unit = @unit, location = @location,
-             category = @category, best_before = @best_before, updated_at = @updated_at, notes = @notes
+             category = @category, best_before = @best_before, updated_at = @updated_at, notes = @notes,
+             minimum_quantity = @minimum_quantity
          WHERE id = @id`,
       )
       .run({
@@ -174,6 +187,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
         best_before: updated.bestBefore.toISOString(),
         updated_at: updated.updatedAt.toISOString(),
         notes: updated.notes ?? null,
+        minimum_quantity: updated.minimumQuantity ?? null,
       });
 
     return updated;

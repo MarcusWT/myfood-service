@@ -14,6 +14,7 @@ export const FoodItemSchema = z.object({
   addedAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   notes: z.string().trim().max(500).optional(),
+  minimumQuantity: z.number().nonnegative().max(MAX_QUANTITY).optional(),
 });
 
 export type FoodItem = z.infer<typeof FoodItemSchema>;
@@ -65,4 +66,12 @@ export function isExpiringSoon(
   const threshold = new Date(now);
   threshold.setDate(threshold.getDate() + withinDays);
   return item.bestBefore <= threshold && item.bestBefore >= now;
+}
+
+/**
+ * Determines if a food item's quantity has fallen below its user-defined minimum.
+ * Items without a `minimumQuantity` set are never considered low stock.
+ */
+export function isLowStock(item: FoodItem): boolean {
+  return item.minimumQuantity !== undefined && item.quantity < item.minimumQuantity;
 }

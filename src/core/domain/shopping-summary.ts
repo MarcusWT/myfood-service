@@ -1,5 +1,5 @@
 import { Category } from './value-objects.js';
-import { FoodItem } from './food-item.js';
+import { FoodItem, isLowStock } from './food-item.js';
 
 export interface ShoppingItem {
   name: string;
@@ -17,7 +17,9 @@ export interface ShoppingSummary {
 
 /**
  * Builds a shopping summary from a list of food items.
- * Includes items that are expired, critically low, or expiring within 3 days.
+ * Includes items that are expired, expiring within 3 days, or below their
+ * user-defined minimum quantity (low stock). When an item is both expiring
+ * and low on stock, the expiry-related reason takes precedence.
  */
 export function buildShoppingSummary(
   items: FoodItem[],
@@ -27,7 +29,7 @@ export function buildShoppingSummary(
   threshold.setDate(threshold.getDate() + 3);
 
   const shoppingItems: ShoppingItem[] = items
-    .filter((item) => item.bestBefore <= threshold)
+    .filter((item) => item.bestBefore <= threshold || isLowStock(item))
     .map((item) => {
       const reason: ShoppingItem['reason'] =
         item.bestBefore < now
