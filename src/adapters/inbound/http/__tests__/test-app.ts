@@ -72,7 +72,7 @@ export function makeCreateFoodItemInput(
     unit: 'UNITS',
     location: 'FRIDGE',
     category: 'OTHER',
-    bestBefore: '2026-09-01T00:00:00.000Z',
+    bestBefore: new Date(Date.now() + 30 * 86_400_000).toISOString(),
     ...overrides,
   };
 }
