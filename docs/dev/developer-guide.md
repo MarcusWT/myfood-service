@@ -152,6 +152,13 @@ npm run build   # tsc → dist/
 npm start       # node dist/index.js
 ```
 
+### Running with Docker
+
+See the "Running with Docker" section in the root `README.md` for the multi-stage
+`Dockerfile` and `docker-compose.yml` workflow (`docker compose up --build`). Remember
+that `JWT_SECRET` must be set in `.env` — the app will refuse to start without it outside
+the `test` environment.
+
 ## Project structure reference
 
 This project follows a hexagonal (ports & adapters) architecture — see `AGENTS.md` at the repo root

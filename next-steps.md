@@ -131,15 +131,17 @@ codebase (see individual "Why" sections for the specific gaps observed).
 ---
 
 
-## 12. Containerisation
+## 12. Containerisation — ✅ Done
 
 **Why:** Ensures consistent runtime across environments and simplifies deployment.
 
-- Add a `Dockerfile` (multi-stage: `node:24` build stage running `npm ci && npm run build`, slim production stage copying only `dist/`, `node_modules` (production-only), and `package.json`)
-- Add a `docker-compose.yml` for local development, mounting `./data` as a volume so the SQLite file persists across container restarts, and reading env vars from `.env`
-- Add a `.dockerignore` (`node_modules`, `dist`, `data`, `.env`, test files)
-- Document container usage in `README.md` and cross-reference from `docs/dev/developer-guide.md`
-- Consider a `docker-compose.yml` `healthcheck` against `GET /health` once that endpoint exists (see item 15)
+- [x] Added a multi-stage `Dockerfile` (`node:24-slim` build stage running `npm ci && npm run build`, then `npm prune --omit=dev`; slim `node:24-slim` production stage copies the pruned `node_modules`, compiled `dist/`, and `package.json` from the build stage — no compiler toolchain in the final image, runs as an unprivileged `app` user, not root)
+- [x] Added `docker-compose.yml` for local development, bind-mounting `./data` to `/app/data` so the SQLite file persists across container restarts, reading env vars from `.env`, and mapping the configured `PORT`
+- [x] Added `.dockerignore` (`node_modules`, `dist`, `data`, `.env*` except `.env.example`, `.git`, tests, docs)
+- [x] Documented container usage in `README.md` ("Running with Docker" section) and cross-referenced from `docs/dev/developer-guide.md`
+- [x] Added a `docker-compose.yml` `healthcheck` against `GET /health` via `curl`
+- [x] Hardened after independent review: initial version ran as root and re-installed the full `python3/make/g++` compiler toolchain in the production stage (needed to (re)build `better-sqlite3`/`bcrypt` native bindings, but both stages already share the same `node:24-slim` base/libc, so this was unnecessary bloat/attack surface); fixed by building native modules once in the build stage, pruning dev dependencies, and copying the already-built `node_modules` into production — no toolchain ships in the final image, verified by `docker build` + manual `docker run`/`docker exec whoami` (confirmed non-root `app` user, ~516MB image, no `gcc`/`python3`/`make` present)
+- [x] Set an explicit `ENV DB_PATH=/app/data/myfood.db` default in the Dockerfile so the SQLite file always lands in the volume-mounted directory even if `DB_PATH` is omitted from `.env` (the bare-metal fallback in `src/config.ts` resolves elsewhere and isn't volume-mounted) — verified data persists across `docker restart` without `DB_PATH` being set at all, using only the image's built-in default
 
 ---
 

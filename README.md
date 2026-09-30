@@ -69,6 +69,52 @@ GET /health
 
 ---
 
+## Running with Docker
+
+The service ships with a multi-stage `Dockerfile` and a `docker-compose.yml` for local development.
+
+### Setup
+
+```bash
+# Copy environment config if you haven't already
+cp .env.example .env
+
+# Edit .env and set JWT_SECRET to a long random value (required — the app
+# refuses to start outside the test environment without it) and
+# SPOONACULAR_API_KEY if you want recipe suggestions to work.
+```
+
+### Build and run
+
+```bash
+docker compose up --build
+```
+
+This builds the image (build stage runs `npm ci && npm run build`, then prunes
+dev dependencies; the production stage copies in the pruned `node_modules` and
+compiled `dist/` — no compiler toolchain ships in the final image, and the
+container runs as an unprivileged `app` user), starts the container, and maps
+the configured `PORT` (default `3000`) to the host.
+
+The SQLite database file is persisted outside the container by bind-mounting `./data`
+(on the host) to `/app/data` (in the container) — data survives container restarts and
+rebuilds. The compose file also defines a `healthcheck` that polls `GET /health`.
+The image sets a default `DB_PATH=/app/data/myfood.db`, so this works even if
+`DB_PATH` is omitted from `.env` (unlike running the app outside Docker, where
+the default resolves elsewhere and `DB_PATH` should be set explicitly).
+
+### Without docker-compose
+
+```bash
+docker build -t myfood-service .
+docker run -p 3000:3000 \
+  -e JWT_SECRET=a-long-random-secret \
+  -v "$(pwd)/data:/app/data" \
+  myfood-service
+```
+
+---
+
 ## API Reference
 
 All endpoints are prefixed with `/api/v1`.
@@ -148,6 +194,8 @@ Returns a shopping list summary grouped by category. Includes items that are exp
 | `DB_PATH` | `./data/myfood.db` | SQLite database file path |
 | `SPOONACULAR_API_KEY` | — | Required for recipe suggestions |
 | `EXPIRY_ALERT_DEFAULT_DAYS` | `7` | Default alert window in days |
+| `JWT_SECRET` | — | **Required** outside the `test` environment; the app throws at startup if unset |
+| `JWT_EXPIRES_IN` | `24h` | JWT token expiry |
 
 ---
 

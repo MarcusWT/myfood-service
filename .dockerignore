@@ -1,0 +1,17 @@
+node_modules
+dist
+data
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.nvmrc
+next-steps.md
+README.md
+docs
+**/__tests__
+*.test.ts
+coverage
+*.log
+.DS_Store
