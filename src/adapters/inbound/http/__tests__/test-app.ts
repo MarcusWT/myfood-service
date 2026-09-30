@@ -14,7 +14,9 @@ import { ShoppingSummaryService } from '../../../../application/shopping-summary
 import { AuthService } from '../../../../application/auth.service.js';
 import { InMemoryFoodItemRepository } from '../../../outbound/persistence/food-item.in-memory.repository.js';
 import { InMemoryUserRepository } from '../../../outbound/persistence/user.in-memory.repository.js';
+import { InMemoryHealthCheckAdapter } from '../../../outbound/persistence/health-check.in-memory.adapter.js';
 import type { RecipeProviderPort } from '../../../../core/ports/outbound/recipe-provider.port.js';
+import type { HealthCheckPort } from '../../../../core/ports/outbound/health-check.port.js';
 import type { CreateFoodItemInput, FoodItem } from '../../../../core/domain/food-item.js';
 
 /**
@@ -41,7 +43,10 @@ export interface TestApp {
  * integration-level coverage of the HTTP layer without hitting SQLite or
  * external APIs.
  */
-export function buildTestApp(recipeProvider: RecipeProviderPort = fakeRecipeProvider()): TestApp {
+export function buildTestApp(
+  recipeProvider: RecipeProviderPort = fakeRecipeProvider(),
+  healthCheckPort: HealthCheckPort = new InMemoryHealthCheckAdapter(),
+): TestApp {
   const repo = new InMemoryFoodItemRepository();
   const userRepo = new InMemoryUserRepository();
 
@@ -64,6 +69,7 @@ export function buildTestApp(recipeProvider: RecipeProviderPort = fakeRecipeProv
     shoppingSummaryController,
     authController,
     authService,
+    healthCheckPort,
   );
 
   return { app, repo, userRepo, recipeProvider };

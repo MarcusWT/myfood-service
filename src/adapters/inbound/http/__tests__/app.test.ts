@@ -9,10 +9,12 @@ import { ShoppingSummaryController } from '../shopping-summary.controller.js';
 import { AuthController } from '../auth.controller.js';
 import { AuthService } from '../../../../application/auth.service.js';
 import { InMemoryUserRepository } from '../../../outbound/persistence/user.in-memory.repository.js';
+import { InMemoryHealthCheckAdapter } from '../../../outbound/persistence/health-check.in-memory.adapter.js';
 import type { FoodItemServicePort } from '../../../../core/ports/inbound/food-item.service.port.js';
 import type { ExpiryAlertServicePort } from '../../../../core/ports/inbound/expiry-alert.service.port.js';
 import type { RecipeServicePort } from '../../../../core/ports/inbound/recipe.service.port.js';
 import type { ShoppingSummaryServicePort } from '../../../../core/ports/inbound/shopping-summary.service.port.js';
+import type { HealthCheckPort } from '../../../../core/ports/outbound/health-check.port.js';
 
 describe('App (cross-cutting)', () => {
   describe('GET /health', () => {
@@ -24,6 +26,38 @@ describe('App (cross-cutting)', () => {
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ status: 'ok', service: 'myfood-service' });
       expect(res.body.timestamp).toEqual(expect.any(String));
+    });
+  });
+
+  describe('GET /health/ready', () => {
+    it('returns 200 when the database is reachable', async () => {
+      const { app } = buildTestApp();
+
+      const res = await request(app).get('/health/ready');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ status: 'ok', service: 'myfood-service' });
+      expect(res.body.timestamp).toEqual(expect.any(String));
+    });
+
+    it('returns 503 when the database is unreachable', async () => {
+      const failingHealthCheckPort: HealthCheckPort = {
+        checkReadiness: vi.fn().mockResolvedValue(false),
+      };
+      const { app } = buildTestApp(undefined, failingHealthCheckPort);
+
+      const res = await request(app).get('/health/ready');
+
+      expect(res.status).toBe(503);
+      expect(res.body).toMatchObject({ status: 'error', service: 'myfood-service' });
+    });
+
+    it('does not require authentication', async () => {
+      const { app } = buildTestApp();
+
+      const res = await request(app).get('/health/ready');
+
+      expect(res.status).not.toBe(401);
     });
   });
 
@@ -68,6 +102,7 @@ describe('App (cross-cutting)', () => {
         new ShoppingSummaryController(noopShoppingSummaryService),
         new AuthController(authService),
         authService,
+        new InMemoryHealthCheckAdapter(),
       );
 
       const { authHeader } = await registerTestUser(app);

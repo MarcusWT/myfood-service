@@ -212,6 +212,39 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'get',
+  path: '/health/ready',
+  tags: ['Health'],
+  summary: 'Deep readiness check (verifies the database connection is usable)',
+  responses: {
+    200: {
+      description: 'Service and database are ready',
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.literal('ok'),
+            service: z.string(),
+            timestamp: z.string(),
+          }),
+        },
+      },
+    },
+    503: {
+      description: 'Database is unreachable',
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.literal('error'),
+            service: z.string(),
+            timestamp: z.string(),
+          }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
   method: 'post',
   path: '/auth/register',
   tags: ['Auth'],

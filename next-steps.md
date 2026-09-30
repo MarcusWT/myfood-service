@@ -145,13 +145,15 @@ codebase (see individual "Why" sections for the specific gaps observed).
 
 ---
 
-## 13. Deeper Readiness Check
+## 13. Deeper Readiness Check — ✅ Done
 
 **Why:** `GET /health` already exists (`src/adapters/inbound/http/app.ts`) and returns a static `{ status, service, timestamp }` payload, which is enough for a basic liveness probe but doesn't verify the database connection is actually usable.
 
-- Add a `GET /health/ready` (or extend `/health` with a `?deep=true` flag) that runs a trivial `SELECT 1` against the SQLite connection and reports `503` if it fails
-- Useful once containerised (item 12) for a Docker/`docker-compose` healthcheck, and later for k8s readiness probes
-- Exclude `/health` from request logging noise (or log at a lower verbosity) once it starts being polled frequently by orchestrators
+- [x] Added `GET /health/ready`, which runs a trivial `SELECT 1` against the SQLite connection via a new `HealthCheckPort` (`core/ports/outbound/health-check.port.ts`), implemented by `SqliteHealthCheckAdapter` (wraps the `better-sqlite3` `Database` instance, exposed via a new `getConnection()` on `SqliteFoodItemRepository`) and `InMemoryHealthCheckAdapter` (always healthy, used for the `DB_PATH=:memory:` fallback and in tests); returns `200` on success, `503` on failure
+- [x] Wired in `src/index.ts` alongside the other outbound adapters; no auth required (registered in `app.ts` before the `/api/v1` router, same as `/health`)
+- [x] Excluded `/health` and `/health/ready` from `morgan` request logging noise via a `skip` predicate in `request-logger.middleware.ts`
+- [x] Added to the OpenAPI registry (200/503 responses documented, no security requirement)
+- [x] Useful once containerised (item 12) for a Docker/`docker-compose` healthcheck, and later for k8s readiness probes
 
 ---
 

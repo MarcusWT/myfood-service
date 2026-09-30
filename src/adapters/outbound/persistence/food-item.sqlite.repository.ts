@@ -87,6 +87,16 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     this.migrateAddUserIdColumn();
   }
 
+  /**
+   * Exposes the underlying `better-sqlite3` connection for cross-cutting
+   * concerns that need direct DB access (e.g. a readiness health check).
+   * Kept read-only in intent — callers should not run mutating statements
+   * through this escape hatch.
+   */
+  getConnection(): Database.Database {
+    return this.db;
+  }
+
   private migrateAddMinimumQuantityColumn(): void {
     const columns = this.db.prepare('PRAGMA table_info(food_items)').all() as { name: string }[];
     if (!columns.some((column) => column.name === 'minimum_quantity')) {

@@ -17,6 +17,7 @@ describe('OpenAPI documentation', () => {
       expect(paths).toEqual(
         expect.arrayContaining([
           '/health',
+          '/health/ready',
           '/food-items',
           '/food-items/{id}',
           '/alerts/expiry',

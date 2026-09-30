@@ -36,4 +36,21 @@ describe('request-logger.middleware', () => {
     expect(morganMock).toHaveBeenCalledWith('dev', expect.objectContaining({ stream: expect.anything() }));
     expect(middleware).toBe(morganMiddleware);
   });
+
+  it('skips logging for /health and /health/ready', async () => {
+    vi.doMock('../../../../config.js', () => ({
+      config: { nodeEnv: 'development' },
+    }));
+
+    const morganMock = vi.fn().mockReturnValue(vi.fn());
+    vi.doMock('morgan', () => ({ default: morganMock }));
+
+    const { createRequestLogger } = await import('../request-logger.middleware.js');
+    createRequestLogger();
+
+    const options = morganMock.mock.calls[0][1] as { skip: (req: { path: string }) => boolean };
+    expect(options.skip({ path: '/health' })).toBe(true);
+    expect(options.skip({ path: '/health/ready' })).toBe(true);
+    expect(options.skip({ path: '/api/v1/food-items' })).toBe(false);
+  });
 });

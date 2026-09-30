@@ -5,12 +5,15 @@ import { config } from './config.js';
 // Ports
 import type { FoodItemRepositoryPort } from './core/ports/outbound/food-item.repository.port.js';
 import type { UserRepositoryPort } from './core/ports/outbound/user-repository.port.js';
+import type { HealthCheckPort } from './core/ports/outbound/health-check.port.js';
 
 // Outbound adapters
 import { SqliteFoodItemRepository } from './adapters/outbound/persistence/food-item.sqlite.repository.js';
 import { InMemoryFoodItemRepository } from './adapters/outbound/persistence/food-item.in-memory.repository.js';
 import { SqliteUserRepository } from './adapters/outbound/persistence/user.sqlite.repository.js';
 import { InMemoryUserRepository } from './adapters/outbound/persistence/user.in-memory.repository.js';
+import { SqliteHealthCheckAdapter } from './adapters/outbound/persistence/health-check.sqlite.adapter.js';
+import { InMemoryHealthCheckAdapter } from './adapters/outbound/persistence/health-check.in-memory.adapter.js';
 import { SpoonacularRecipeAdapter } from './adapters/outbound/recipe-provider/spoonacular.adapter.js';
 import { ConsoleNotificationAdapter } from './adapters/outbound/notification/console-notification.adapter.js';
 
@@ -45,6 +48,10 @@ const userRepository: UserRepositoryPort =
   config.dbPath === ':memory:'
     ? new InMemoryUserRepository()
     : new SqliteUserRepository(config.dbPath);
+const healthCheckPort: HealthCheckPort =
+  config.dbPath === ':memory:' || !(foodItemRepository instanceof SqliteFoodItemRepository)
+    ? new InMemoryHealthCheckAdapter()
+    : new SqliteHealthCheckAdapter(foodItemRepository.getConnection());
 const recipeProvider = new SpoonacularRecipeAdapter(config.spoonacularApiKey);
 
 const foodItemService = new FoodItemService(foodItemRepository);
@@ -66,6 +73,7 @@ const app = createApp(
   shoppingSummaryController,
   authController,
   authService,
+  healthCheckPort,
 );
 
 const notificationPort = new ConsoleNotificationAdapter();
