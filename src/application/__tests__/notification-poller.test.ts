@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NotificationPoller } from '../notification-poller.js';
+import { logger } from '../../logger.js';
 import type { ExpiryAlertServicePort } from '../../core/ports/inbound/expiry-alert.service.port.js';
 import type { NotificationPort } from '../../core/ports/outbound/notification.port.js';
 import type { UserRepositoryPort } from '../../core/ports/outbound/user-repository.port.js';
@@ -70,7 +71,7 @@ describe('NotificationPoller', () => {
     });
 
     it('logs and swallows errors from the expiry alert service', async () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined as never);
       (expiryAlertService.getAlerts as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error('boom'),
       );
@@ -88,7 +89,7 @@ describe('NotificationPoller', () => {
     });
 
     it('logs and swallows errors from the notification port', async () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined as never);
       (expiryAlertService.getAlerts as ReturnType<typeof vi.fn>).mockResolvedValue([
         { daysUntilExpiry: 1 },
       ]);

@@ -15,6 +15,7 @@ import type { ExpiryAlertServicePort } from '../../../../core/ports/inbound/expi
 import type { RecipeServicePort } from '../../../../core/ports/inbound/recipe.service.port.js';
 import type { ShoppingSummaryServicePort } from '../../../../core/ports/inbound/shopping-summary.service.port.js';
 import type { HealthCheckPort } from '../../../../core/ports/outbound/health-check.port.js';
+import { logger } from '../../../../logger.js';
 
 describe('App (cross-cutting)', () => {
   describe('GET /health', () => {
@@ -77,7 +78,7 @@ describe('App (cross-cutting)', () => {
     });
 
     it('returns 500 with a generic message when a service throws an unexpected error', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined as never);
 
       const throwingFoodItemService: FoodItemServicePort = {
         addItem: vi.fn(),
@@ -113,7 +114,7 @@ describe('App (cross-cutting)', () => {
 
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'Internal Server Error' });
-      expect(console.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 });

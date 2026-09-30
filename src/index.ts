@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { config } from './config.js';
+import { logger } from './logger.js';
 
 // Ports
 import type { FoodItemRepositoryPort } from './core/ports/outbound/food-item.repository.port.js';
@@ -93,7 +94,7 @@ process.on('SIGTERM', () => notificationPoller.stop());
 process.on('SIGINT', () => notificationPoller.stop());
 
 app.listen(config.port, () => {
-  console.log(`[MYFood Service] Listening on port ${config.port}`);
-  console.log(`[MYFood Service] Database: ${config.dbPath}`);
-  console.log(`[MYFood Service] Health: http://localhost:${config.port}/health`);
+  logger.info(`[MYFood Service] Listening on port ${config.port}`);
+  logger.info(`[MYFood Service] Database: ${config.dbPath}`);
+  logger.info(`[MYFood Service] Health: http://localhost:${config.port}/health`);
 });

@@ -1,6 +1,7 @@
 import { Recipe, RecipeIngredient } from '../../../core/domain/recipe.js';
 import { RecipeProviderPort } from '../../../core/ports/outbound/recipe-provider.port.js';
 import { TtlCache } from './ttl-cache.js';
+import { logger } from '../../../logger.js';
 
 interface SpoonacularIngredient {
   name: string;
@@ -116,9 +117,9 @@ export class SpoonacularRecipeAdapter implements RecipeProviderPort {
       this.consecutiveEnrichmentFailures = 0;
     } catch (error) {
       this.recordEnrichmentFailure();
-      console.warn(
-        `[SpoonacularRecipeAdapter] Failed to enrich recipe ${recipe.id}:`,
-        error instanceof Error ? error.message : error,
+      logger.warn(
+        { recipeId: recipe.id, err: error },
+        '[SpoonacularRecipeAdapter] Failed to enrich recipe',
       );
       // Graceful degradation: recipe keeps readyInMinutes: 0, servings: 0
     }
@@ -152,8 +153,9 @@ export class SpoonacularRecipeAdapter implements RecipeProviderPort {
     if (this.consecutiveEnrichmentFailures >= CIRCUIT_BREAKER_FAILURE_THRESHOLD) {
       this.circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
       this.consecutiveEnrichmentFailures = 0;
-      console.warn(
-        `[SpoonacularRecipeAdapter] Enrichment circuit breaker opened for ${CIRCUIT_BREAKER_COOLDOWN_MS}ms after repeated failures.`,
+      logger.warn(
+        { cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS },
+        '[SpoonacularRecipeAdapter] Enrichment circuit breaker opened after repeated failures',
       );
     }
   }

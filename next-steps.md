@@ -157,13 +157,16 @@ codebase (see individual "Why" sections for the specific gaps observed).
 
 ---
 
-## 14. Structured / Leveled Logging
+## 14. Structured / Leveled Logging — ✅ Done
 
 **Why:** `morgan` covers HTTP access logs, but application-level logs (config warnings, notification poller, Spoonacular circuit breaker events) currently use raw `console.log`/`console.warn` with inconsistent formatting.
 
-- Introduce a lightweight structured logger (e.g. `pino`) as a cross-cutting concern, or a small internal wrapper if a new dependency isn't wanted
-- Replace ad-hoc `console.*` calls in `src/config.ts`, `notification-poller.ts`, and `spoonacular.adapter.ts` with the shared logger
-- Support a `LOG_LEVEL` env var and ensure `test` env stays quiet (mirroring the existing morgan suppression)
+- [x] Introduced `pino` as a lightweight structured logger, exposed as a shared `logger` instance from `src/logger.ts` (top-level, alongside `config.ts`, since it's a cross-cutting concern kept out of `core/domain` and `core/ports`)
+- [x] Replaced ad-hoc `console.*` calls in `src/application/notification-poller.ts`, `src/adapters/outbound/recipe-provider/spoonacular.adapter.ts`, `src/adapters/outbound/notification/console-notification.adapter.ts`, `src/adapters/inbound/http/error-handler.ts`, and the `src/index.ts` startup banners with the shared logger (the `SPOONACULAR_API_KEY` warning in `src/config.ts` intentionally still uses `console.warn` — `logger.ts` imports `config.ts`, so using the logger there would be circular)
+- [x] Added a `LOG_LEVEL` env var (default `info`), read via `config.ts` following its existing pattern, documented in `.env.example`
+- [x] `test` env stays quiet: the logger is forced to `silent` level when `NODE_ENV=test`, mirroring the existing morgan suppression in `request-logger.middleware.ts`
+- [x] Updated tests that previously spied on `console.log`/`console.warn`/`console.error` (`console-notification.adapter.test.ts`, `notification-poller.test.ts`, `app.test.ts`) to spy on the shared `logger` instead
+- [x] Hardened after independent review: `error-handler.ts`'s catch-all handler originally logged the raw caught error object (`{ err }`) — for malformed JSON request bodies, Express's body-parser attaches the raw unparsed body (including plaintext passwords on `/auth/register`/`/auth/login`) as `.body` on the thrown `SyntaxError`, which would have been logged verbatim. Fixed by logging only a minimal safe subset (`name`, `message`, `stack`) instead of the raw object; verified via a live repro (malformed JSON with a password in the body no longer appears in log output)
 
 ---
 

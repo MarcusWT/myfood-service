@@ -18,9 +18,12 @@ export const config = {
     process.env.JWT_SECRET ??
     (process.env.NODE_ENV === 'test' ? 'test-secret-not-for-production' : ''),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '24h',
+  logLevel: process.env.LOG_LEVEL ?? 'info',
 } as const;
 
 if (!config.spoonacularApiKey) {
+  // Note: logger.ts imports config.ts, so the shared logger can't be used
+  // here without introducing a circular import; console.warn is intentional.
   console.warn(
     '[Config] SPOONACULAR_API_KEY is not set. Recipe suggestions will fail.',
   );

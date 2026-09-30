@@ -1,5 +1,6 @@
 import { ExpiryAlert } from '../../../core/domain/expiry-alert.js';
 import { NotificationPort } from '../../../core/ports/outbound/notification.port.js';
+import { logger } from '../../../logger.js';
 
 /**
  * Starting-point notification adapter: logs alerts to stdout. A future
@@ -11,7 +12,8 @@ export class ConsoleNotificationAdapter implements NotificationPort {
     if (alerts.length === 0) return;
 
     for (const alert of alerts) {
-      console.log(
+      logger.info(
+        { status: alert.status, item: alert.item.name, daysUntilExpiry: alert.daysUntilExpiry },
         `[Alert] ${alert.status}: "${alert.item.name}" — ${alert.daysUntilExpiry} day(s) until expiry`,
       );
     }

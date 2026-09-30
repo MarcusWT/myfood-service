@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { NotFoundError, ConflictError } from '../../../application/food-item.service.js';
 import { UnauthorizedError } from '../../../application/auth.service.js';
+import { logger } from '../../../logger.js';
 
 export function errorHandler(
   err: unknown,
@@ -32,6 +33,15 @@ export function errorHandler(
     return;
   }
 
-  console.error('[Unhandled Error]', err);
+  // Log only a minimal, known-safe subset of the error rather than the raw
+  // caught object: body-parser attaches the raw unparsed request body (which
+  // may contain plaintext passwords or other sensitive fields) as `.body` on
+  // the SyntaxError it throws for malformed JSON, and logging `{ err }`
+  // directly would serialize that straight into log output.
+  const safeError =
+    err instanceof Error
+      ? { name: err.name, message: err.message, stack: err.stack }
+      : { message: String(err) };
+  logger.error({ err: safeError }, '[Unhandled Error]');
   res.status(500).json({ error: 'Internal Server Error' });
 }

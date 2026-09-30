@@ -1,6 +1,7 @@
 import { ExpiryAlertServicePort } from '../core/ports/inbound/expiry-alert.service.port.js';
 import { NotificationPort } from '../core/ports/outbound/notification.port.js';
 import { UserRepositoryPort } from '../core/ports/outbound/user-repository.port.js';
+import { logger } from '../logger.js';
 
 /**
  * Periodically polls for expiring items (per registered user, since food
@@ -45,7 +46,7 @@ export class NotificationPoller {
         }
       }
     } catch (err) {
-      console.error('[NotificationPoller] Failed to poll for expiry alerts:', err);
+      logger.error({ err }, '[NotificationPoller] Failed to poll for expiry alerts');
     }
   }
 }

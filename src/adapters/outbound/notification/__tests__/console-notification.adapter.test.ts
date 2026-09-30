@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConsoleNotificationAdapter } from '../console-notification.adapter.js';
+import { logger } from '../../../../logger.js';
 import type { ExpiryAlert } from '../../../../core/domain/expiry-alert.js';
 import type { FoodItem } from '../../../../core/domain/food-item.js';
 
@@ -27,7 +28,7 @@ describe('ConsoleNotificationAdapter', () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    logSpy = vi.spyOn(logger, 'info').mockImplementation(() => undefined as never);
   });
 
   afterEach(() => {
@@ -52,9 +53,17 @@ describe('ConsoleNotificationAdapter', () => {
     await adapter.notify(alerts);
 
     expect(logSpy).toHaveBeenCalledTimes(2);
-    expect(logSpy).toHaveBeenNthCalledWith(1, expect.stringContaining('CRITICAL'));
-    expect(logSpy).toHaveBeenNthCalledWith(1, expect.stringContaining('Eggs'));
-    expect(logSpy).toHaveBeenNthCalledWith(2, expect.stringContaining('EXPIRED'));
-    expect(logSpy).toHaveBeenNthCalledWith(2, expect.stringContaining('Milk'));
+    expect(logSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.stringContaining('CRITICAL'),
+    );
+    expect(logSpy).toHaveBeenNthCalledWith(1, expect.anything(), expect.stringContaining('Eggs'));
+    expect(logSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.stringContaining('EXPIRED'),
+    );
+    expect(logSpy).toHaveBeenNthCalledWith(2, expect.anything(), expect.stringContaining('Milk'));
   });
 });
