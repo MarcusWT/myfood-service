@@ -2,8 +2,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { InMemoryFoodItemRepository } from '../food-item.in-memory.repository.js';
 import type { FoodItem } from '../../../../core/domain/food-item.js';
 
+const USER_ID = 'user-0000-0000-0000-0000-000000000001';
+
 const makeItem = (overrides?: Partial<FoodItem>): FoodItem => ({
   id: '00000000-0000-0000-0000-000000000001',
+  userId: USER_ID,
   name: 'Eggs',
   quantity: 12,
   unit: 'UNITS',
@@ -27,12 +30,12 @@ describe('InMemoryFoodItemRepository', () => {
       const item = makeItem();
       await repo.save(item);
 
-      const found = await repo.findById(item.id);
+      const found = await repo.findById(item.id, USER_ID);
       expect(found).toEqual(item);
     });
 
     it('returns null for a missing id', async () => {
-      const found = await repo.findById('missing-id');
+      const found = await repo.findById('missing-id', USER_ID);
       expect(found).toBeNull();
     });
 
@@ -42,7 +45,7 @@ describe('InMemoryFoodItemRepository', () => {
 
       item.name = 'Mutated';
 
-      const found = await repo.findById(item.id);
+      const found = await repo.findById(item.id, USER_ID);
       expect(found?.name).toBe('Eggs');
     });
   });
@@ -62,7 +65,7 @@ describe('InMemoryFoodItemRepository', () => {
       await repo.save(later);
       await repo.save(sooner);
 
-      const results = await repo.findAll();
+      const results = await repo.findAll(USER_ID);
       expect(results.map((i) => i.id)).toEqual([sooner.id, later.id]);
     });
 
@@ -72,7 +75,7 @@ describe('InMemoryFoodItemRepository', () => {
       await repo.save(fridgeItem);
       await repo.save(freezerItem);
 
-      const results = await repo.findAll({ location: 'FREEZER' });
+      const results = await repo.findAll(USER_ID, { location: 'FREEZER' });
       expect(results).toEqual([freezerItem]);
     });
 
@@ -82,7 +85,7 @@ describe('InMemoryFoodItemRepository', () => {
       await repo.save(dairy);
       await repo.save(meat);
 
-      const results = await repo.findAll({ category: 'MEAT' });
+      const results = await repo.findAll(USER_ID, { category: 'MEAT' });
       expect(results).toEqual([meat]);
     });
 
@@ -92,7 +95,7 @@ describe('InMemoryFoodItemRepository', () => {
       await repo.save(eggs);
       await repo.save(milk);
 
-      const results = await repo.findAll({ name: 'egg' });
+      const results = await repo.findAll(USER_ID, { name: 'egg' });
       expect(results).toEqual([eggs]);
     });
   });
@@ -109,7 +112,7 @@ describe('InMemoryFoodItemRepository', () => {
         );
       }
 
-      const result = await repo.findAllPaginated({}, { page: 1, limit: 2 });
+      const result = await repo.findAllPaginated(USER_ID, {}, { page: 1, limit: 2 });
 
       expect(result.total).toBe(5);
       expect(result.page).toBe(1);
@@ -130,7 +133,7 @@ describe('InMemoryFoodItemRepository', () => {
         );
       }
 
-      const result = await repo.findAllPaginated({}, { page: 3, limit: 2 });
+      const result = await repo.findAllPaginated(USER_ID, {}, { page: 3, limit: 2 });
 
       expect(result.data).toHaveLength(1);
       expect(result.data[0].name).toBe('Item 4');
@@ -141,7 +144,7 @@ describe('InMemoryFoodItemRepository', () => {
       await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000031', location: 'FREEZER' }));
       await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000032', location: 'FREEZER' }));
 
-      const result = await repo.findAllPaginated({ location: 'FREEZER' }, { page: 1, limit: 1 });
+      const result = await repo.findAllPaginated(USER_ID, { location: 'FREEZER' }, { page: 1, limit: 1 });
 
       expect(result.total).toBe(2);
       expect(result.data).toHaveLength(1);
@@ -150,7 +153,7 @@ describe('InMemoryFoodItemRepository', () => {
     it('returns an empty data array when the page is beyond the available results', async () => {
       await repo.save(makeItem());
 
-      const result = await repo.findAllPaginated({}, { page: 5, limit: 10 });
+      const result = await repo.findAllPaginated(USER_ID, {}, { page: 5, limit: 10 });
 
       expect(result.data).toEqual([]);
       expect(result.total).toBe(1);
@@ -162,14 +165,14 @@ describe('InMemoryFoodItemRepository', () => {
       const item = makeItem({ name: 'Eggs', location: 'FRIDGE' });
       await repo.save(item);
 
-      const found = await repo.findByNameAndLocation('eggs', 'FRIDGE');
+      const found = await repo.findByNameAndLocation(USER_ID, 'eggs', 'FRIDGE');
       expect(found?.id).toBe(item.id);
     });
 
     it('returns null when the name matches but the location differs', async () => {
       await repo.save(makeItem({ name: 'Eggs', location: 'FRIDGE' }));
 
-      const found = await repo.findByNameAndLocation('Eggs', 'PANTRY');
+      const found = await repo.findByNameAndLocation(USER_ID, 'Eggs', 'PANTRY');
       expect(found).toBeNull();
     });
 
@@ -177,7 +180,7 @@ describe('InMemoryFoodItemRepository', () => {
       const item = makeItem({ name: 'Eggs', location: 'FRIDGE' });
       await repo.save(item);
 
-      const found = await repo.findByNameAndLocation('Eggs', 'FRIDGE', item.id);
+      const found = await repo.findByNameAndLocation(USER_ID, 'Eggs', 'FRIDGE', item.id);
       expect(found).toBeNull();
     });
   });
@@ -187,7 +190,7 @@ describe('InMemoryFoodItemRepository', () => {
       const item = makeItem();
       await repo.save(item);
 
-      const updated = await repo.update(item.id, { quantity: 6 });
+      const updated = await repo.update(item.id, USER_ID, { quantity: 6 });
 
       expect(updated).not.toBeNull();
       expect(updated?.quantity).toBe(6);
@@ -196,7 +199,7 @@ describe('InMemoryFoodItemRepository', () => {
     });
 
     it('returns null when the item does not exist', async () => {
-      const updated = await repo.update('missing-id', { quantity: 6 });
+      const updated = await repo.update('missing-id', USER_ID, { quantity: 6 });
       expect(updated).toBeNull();
     });
 
@@ -204,10 +207,10 @@ describe('InMemoryFoodItemRepository', () => {
       const item = makeItem({ minimumQuantity: 6 });
       await repo.save(item);
 
-      const found = await repo.findById(item.id);
+      const found = await repo.findById(item.id, USER_ID);
       expect(found?.minimumQuantity).toBe(6);
 
-      const updated = await repo.update(item.id, { minimumQuantity: 2 });
+      const updated = await repo.update(item.id, USER_ID, { minimumQuantity: 2 });
       expect(updated?.minimumQuantity).toBe(2);
     });
   });
@@ -217,12 +220,12 @@ describe('InMemoryFoodItemRepository', () => {
       const item = makeItem();
       await repo.save(item);
 
-      await expect(repo.delete(item.id)).resolves.toBe(true);
-      await expect(repo.findById(item.id)).resolves.toBeNull();
+      await expect(repo.delete(item.id, USER_ID)).resolves.toBe(true);
+      await expect(repo.findById(item.id, USER_ID)).resolves.toBeNull();
     });
 
     it('returns false when the item does not exist', async () => {
-      await expect(repo.delete('missing-id')).resolves.toBe(false);
+      await expect(repo.delete('missing-id', USER_ID)).resolves.toBe(false);
     });
   });
 
@@ -231,7 +234,7 @@ describe('InMemoryFoodItemRepository', () => {
       await repo.save(makeItem());
       repo.clear();
 
-      const results = await repo.findAll();
+      const results = await repo.findAll(USER_ID);
       expect(results).toEqual([]);
     });
   });
@@ -241,7 +244,7 @@ describe('InMemoryFoodItemRepository', () => {
       const other = new InMemoryFoodItemRepository();
       await repo.save(makeItem());
 
-      const results = await other.findAll();
+      const results = await other.findAll(USER_ID);
       expect(results).toEqual([]);
     });
   });

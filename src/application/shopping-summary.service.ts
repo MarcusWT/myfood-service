@@ -5,8 +5,8 @@ import { FoodItemRepositoryPort } from '../core/ports/outbound/food-item.reposit
 export class ShoppingSummaryService implements ShoppingSummaryServicePort {
   constructor(private readonly repository: FoodItemRepositoryPort) {}
 
-  async getSummary(): Promise<ShoppingSummary> {
-    const items = await this.repository.findAll();
+  async getSummary(userId: string): Promise<ShoppingSummary> {
+    const items = await this.repository.findAll(userId);
     return buildShoppingSummary(items);
   }
 }

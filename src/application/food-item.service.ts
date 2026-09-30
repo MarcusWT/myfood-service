@@ -21,8 +21,12 @@ export class ConflictError extends Error {
 export class FoodItemService implements FoodItemServicePort {
   constructor(private readonly repository: FoodItemRepositoryPort) {}
 
-  async addItem(input: CreateFoodItemInput): Promise<FoodItem> {
-    const existing = await this.repository.findByNameAndLocation(input.name, input.location);
+  async addItem(userId: string, input: CreateFoodItemInput): Promise<FoodItem> {
+    const existing = await this.repository.findByNameAndLocation(
+      userId,
+      input.name,
+      input.location,
+    );
     if (existing) {
       throw new ConflictError(
         `An item named '${input.name}' already exists in ${input.location}`,
@@ -33,33 +37,35 @@ export class FoodItemService implements FoodItemServicePort {
     const item: FoodItem = {
       ...input,
       id: uuidv4(),
+      userId,
       addedAt: now,
       updatedAt: now,
     };
     return this.repository.save(item);
   }
 
-  async getItem(id: string): Promise<FoodItem> {
-    const item = await this.repository.findById(id);
+  async getItem(id: string, userId: string): Promise<FoodItem> {
+    const item = await this.repository.findById(id, userId);
     if (!item) {
       throw new NotFoundError(`Food item with id '${id}' not found`);
     }
     return item;
   }
 
-  async listItems(filter?: FoodItemFilter): Promise<FoodItem[]> {
-    return this.repository.findAll(filter);
+  async listItems(userId: string, filter?: FoodItemFilter): Promise<FoodItem[]> {
+    return this.repository.findAll(userId, filter);
   }
 
   async listItemsPaginated(
+    userId: string,
     filter: FoodItemFilter,
     pagination: PaginationInput,
   ): Promise<PaginatedResult<FoodItem>> {
-    return this.repository.findAllPaginated(filter, pagination);
+    return this.repository.findAllPaginated(userId, filter, pagination);
   }
 
-  async updateItem(id: string, input: UpdateFoodItemInput): Promise<FoodItem> {
-    const existing = await this.repository.findById(id);
+  async updateItem(id: string, userId: string, input: UpdateFoodItemInput): Promise<FoodItem> {
+    const existing = await this.repository.findById(id, userId);
     if (!existing) {
       throw new NotFoundError(`Food item with id '${id}' not found`);
     }
@@ -68,6 +74,7 @@ export class FoodItemService implements FoodItemServicePort {
       const effectiveName = input.name ?? existing.name;
       const effectiveLocation = input.location ?? existing.location;
       const conflict = await this.repository.findByNameAndLocation(
+        userId,
         effectiveName,
         effectiveLocation,
         id,
@@ -79,15 +86,15 @@ export class FoodItemService implements FoodItemServicePort {
       }
     }
 
-    const updated = await this.repository.update(id, input);
+    const updated = await this.repository.update(id, userId, input);
     if (!updated) {
       throw new NotFoundError(`Food item with id '${id}' not found`);
     }
     return updated;
   }
 
-  async removeItem(id: string): Promise<void> {
-    const deleted = await this.repository.delete(id);
+  async removeItem(id: string, userId: string): Promise<void> {
+    const deleted = await this.repository.delete(id, userId);
     if (!deleted) {
       throw new NotFoundError(`Food item with id '${id}' not found`);
     }

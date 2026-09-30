@@ -6,7 +6,7 @@ export class ShoppingSummaryController {
 
   getSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const summary = await this.service.getSummary();
+      const summary = await this.service.getSummary(req.userId!);
       res.json(summary);
     } catch (err) {
       next(err);

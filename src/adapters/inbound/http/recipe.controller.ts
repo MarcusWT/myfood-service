@@ -12,7 +12,7 @@ export class RecipeController {
   getSuggestions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { limit } = RecipeQuerySchema.parse(req.query);
-      const recipes = await this.service.getSuggestions(limit);
+      const recipes = await this.service.getSuggestions(req.userId!, limit);
       res.json(recipes);
     } catch (err) {
       next(err);

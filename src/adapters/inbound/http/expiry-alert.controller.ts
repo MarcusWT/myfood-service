@@ -12,7 +12,7 @@ export class ExpiryAlertController {
   getAlerts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { withinDays } = AlertQuerySchema.parse(req.query);
-      const alerts = await this.service.getAlerts(withinDays);
+      const alerts = await this.service.getAlerts(req.userId!, withinDays);
       res.json(alerts);
     } catch (err) {
       next(err);

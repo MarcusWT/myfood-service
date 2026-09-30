@@ -1,20 +1,25 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { Application } from 'express';
-import { buildTestApp, seedFoodItem } from './test-app.js';
+import { buildTestApp, seedFoodItem, registerTestUser } from './test-app.js';
 import { InMemoryFoodItemRepository } from '../../../outbound/persistence/food-item.in-memory.repository.js';
 
 describe('ShoppingSummaryController (HTTP)', () => {
   let app: Application;
   let repo: InMemoryFoodItemRepository;
+  let authHeader: string;
+  let userId: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     ({ app, repo } = buildTestApp());
+    ({ userId, authHeader } = await registerTestUser(app));
   });
 
   describe('GET /api/v1/shopping/summary', () => {
     it('returns an empty summary when no items exist', async () => {
-      const res = await request(app).get('/api/v1/shopping/summary');
+      const res = await request(app)
+        .get('/api/v1/shopping/summary')
+        .set('Authorization', authHeader);
 
       expect(res.status).toBe(200);
       expect(res.body.totalItems).toBe(0);
@@ -29,24 +34,29 @@ describe('ShoppingSummaryController (HTTP)', () => {
 
       await seedFoodItem(repo, {
         id: '11111111-1111-1111-1111-111111111111',
+        userId,
         name: 'Old Milk',
         category: 'DAIRY',
         bestBefore: yesterday,
       });
       await seedFoodItem(repo, {
         id: '22222222-2222-2222-2222-222222222222',
+        userId,
         name: 'Soon Cheese',
         category: 'DAIRY',
         bestBefore: tomorrow,
       });
       await seedFoodItem(repo, {
         id: '33333333-3333-3333-3333-333333333333',
+        userId,
         name: 'Frozen Peas',
         category: 'FROZEN',
         bestBefore: farFuture,
       });
 
-      const res = await request(app).get('/api/v1/shopping/summary');
+      const res = await request(app)
+        .get('/api/v1/shopping/summary')
+        .set('Authorization', authHeader);
 
       expect(res.status).toBe(200);
       expect(res.body.totalItems).toBe(2);
@@ -63,6 +73,7 @@ describe('ShoppingSummaryController (HTTP)', () => {
 
       await seedFoodItem(repo, {
         id: '44444444-4444-4444-4444-444444444444',
+        userId,
         name: 'Eggs',
         category: 'OTHER',
         quantity: 1,
@@ -70,7 +81,9 @@ describe('ShoppingSummaryController (HTTP)', () => {
         bestBefore: farFuture,
       });
 
-      const res = await request(app).get('/api/v1/shopping/summary');
+      const res = await request(app)
+        .get('/api/v1/shopping/summary')
+        .set('Authorization', authHeader);
 
       expect(res.status).toBe(200);
       expect(res.body.totalItems).toBe(1);

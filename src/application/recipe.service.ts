@@ -9,8 +9,8 @@ export class RecipeService implements RecipeServicePort {
     private readonly recipeProvider: RecipeProviderPort,
   ) {}
 
-  async getSuggestions(limit: number = 5): Promise<Recipe[]> {
-    const items = await this.repository.findAll();
+  async getSuggestions(userId: string, limit: number = 5): Promise<Recipe[]> {
+    const items = await this.repository.findAll(userId);
     if (items.length === 0) return [];
 
     // Only use non-expired items for suggestions

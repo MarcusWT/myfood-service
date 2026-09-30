@@ -113,18 +113,23 @@ codebase (see individual "Why" sections for the specific gaps observed).
 
 ---
 
-## 11. Authentication & Authorisation
+## 11. Authentication & Authorisation — ✅ Done
 
 **Why:** The API is currently open with no concept of users. Needed before any public or multi-user deployment.
 
-- Add JWT-based authentication middleware (e.g. `jsonwebtoken` + a new `AuthPort`/`AuthService` following the existing hexagonal pattern — keep token verification out of `core/domain`)
-- Add a `users` table/repository and a login/register flow (or defer to an external identity provider if this is ever exposed beyond self-hosting)
-- Scope food items to a `userId`: add `userId` to the `FoodItem` domain type, thread it through `FoodItemRepositoryPort` methods (`findAll`, `findAllPaginated`, `findById`, `findByNameAndLocation`), and add a `user_id` column + index to the SQLite schema (with the same `PRAGMA table_info` + `ALTER TABLE` migration guard used for `minimum_quantity`)
-- Update `InMemoryFoodItemRepository` to filter by `userId` too, so integration tests stay accurate
-- Consider API key auth (a simple `X-API-Key` header checked against an env-configured value) as a lower-effort alternative for single-user self-hosted deployments, with JWT as an optional upgrade path
-- Update the OpenAPI registry with a `securityScheme` and mark routes as requiring auth once implemented
+- [x] Add JWT-based authentication middleware (`jsonwebtoken` + `AuthServicePort`/`AuthService`, `src/application/auth.service.ts`; token verification (`jsonwebtoken`, `bcrypt`) is confined to the application/adapters layers, `core/domain` and `core/ports` stay infrastructure-free)
+- [x] Add a `users` table/repository (`UserRepositoryPort`, `SqliteUserRepository`, `InMemoryUserRepository`) and a login/register flow (`POST /api/v1/auth/register`, `POST /api/v1/auth/login`)
+- [x] Scope food items to a `userId`: added to the `FoodItem` domain type, threaded through `FoodItemRepositoryPort` methods (`findAll`, `findAllPaginated`, `findById`, `findByNameAndLocation`, `update`, `delete`), plus a `user_id` column + index on `SqliteFoodItemRepository` (same `PRAGMA table_info` + `ALTER TABLE` migration guard used for `minimum_quantity`)
+- [x] `InMemoryFoodItemRepository` updated to filter by `userId` too, so integration tests stay accurate
+- [x] `express-jwt`-style bearer middleware (`src/adapters/inbound/http/middleware/auth.middleware.ts`) applied to all `/food-items`, `/alerts`, `/recipes`, `/shopping-summary` routes (not `/health`, `/api/docs`, `/api/v1/auth/*`)
+- [x] OpenAPI registry updated with a `bearerAuth` securityScheme and all protected routes marked as requiring it
+- [x] The background `NotificationPoller` now fans out per-registered-user (via a new `UserRepositoryPort.listAll()`) since expiry alerts are user-scoped
+- [x] Hardened after independent review (two review agents + one QA agent converged on the same findings): `JWT_SECRET` now fails fast (throws at startup) instead of silently defaulting to an empty string outside `test` env — an empty HMAC secret would let anyone forge tokens; `AuthService`'s constructor also rejects an empty secret as defense-in-depth; `login` now runs a dummy `bcrypt.compare` against a fixed hash when the email isn't found, closing a timing side-channel that allowed user enumeration via response latency (status/message were already generic, but timing wasn't); the `user_id` migration now refuses to start (throws with a remediation hint) if it finds pre-existing rows with `NULL user_id`, rather than silently making them permanently invisible through every scoped query
+- [x] Added test coverage for the above: expired-token rejection, empty-secret constructor guard, and a migration-guard test asserting startup throws when orphaned (no-`user_id`) rows exist
+- Known, accepted limitation (not a blocker): tokens are not revocable — `verifyToken` checks signature/expiry only, not whether the referenced user still exists. Fine today since there's no user-deletion feature; would need a `findById` check per request (or a refresh-token strategy) if account deletion/deactivation is added later
 
 ---
+
 
 ## 12. Containerisation
 

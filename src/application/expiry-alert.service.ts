@@ -5,12 +5,12 @@ import { FoodItemRepositoryPort } from '../core/ports/outbound/food-item.reposit
 export class ExpiryAlertService implements ExpiryAlertServicePort {
   constructor(private readonly repository: FoodItemRepositoryPort) {}
 
-  async getAlerts(withinDays: number = 7): Promise<ExpiryAlert[]> {
+  async getAlerts(userId: string, withinDays: number = 7): Promise<ExpiryAlert[]> {
     const now = new Date();
     const threshold = new Date(now);
     threshold.setDate(threshold.getDate() + withinDays);
 
-    const allItems = await this.repository.findAll();
+    const allItems = await this.repository.findAll(userId);
     return allItems
       .filter((item) => item.bestBefore <= threshold)
       .map((item) => toExpiryAlert(item, now))

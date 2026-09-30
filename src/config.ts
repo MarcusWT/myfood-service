@@ -14,10 +14,22 @@ export const config = {
   notificationWithinDays: Number(
     process.env.NOTIFICATION_WITHIN_DAYS ?? process.env.EXPIRY_ALERT_DEFAULT_DAYS ?? 7,
   ),
+  jwtSecret:
+    process.env.JWT_SECRET ??
+    (process.env.NODE_ENV === 'test' ? 'test-secret-not-for-production' : ''),
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '24h',
 } as const;
 
 if (!config.spoonacularApiKey) {
   console.warn(
     '[Config] SPOONACULAR_API_KEY is not set. Recipe suggestions will fail.',
+  );
+}
+
+if (!config.jwtSecret && config.nodeEnv !== 'test') {
+  throw new Error(
+    '[Config] JWT_SECRET is not set. Refusing to start outside the test environment ' +
+      'because an empty JWT secret would allow anyone to forge authentication tokens. ' +
+      'Set JWT_SECRET in your environment (see .env.example).',
   );
 }

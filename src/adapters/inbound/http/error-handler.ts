@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { NotFoundError, ConflictError } from '../../../application/food-item.service.js';
+import { UnauthorizedError } from '../../../application/auth.service.js';
 
 export function errorHandler(
   err: unknown,
@@ -23,6 +24,11 @@ export function errorHandler(
 
   if (err instanceof ConflictError) {
     res.status(409).json({ error: err.message });
+    return;
+  }
+
+  if (err instanceof UnauthorizedError) {
+    res.status(401).json({ error: err.message });
     return;
   }
 

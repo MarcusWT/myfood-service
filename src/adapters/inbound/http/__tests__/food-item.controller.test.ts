@@ -1,21 +1,24 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { Application } from 'express';
-import { buildTestApp, makeCreateFoodItemInput, seedFoodItem } from './test-app.js';
+import { buildTestApp, makeCreateFoodItemInput, seedFoodItem, registerTestUser } from './test-app.js';
 import { InMemoryFoodItemRepository } from '../../../outbound/persistence/food-item.in-memory.repository.js';
 
 describe('FoodItemController (HTTP)', () => {
   let app: Application;
   let repo: InMemoryFoodItemRepository;
+  let authHeader: string;
+  let userId: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     ({ app, repo } = buildTestApp());
+    ({ userId, authHeader } = await registerTestUser(app));
   });
 
   describe('POST /api/v1/food-items', () => {
     it('creates and returns a new food item', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput());
 
       expect(res.status).toBe(201);
@@ -33,7 +36,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 400 with validation details when name is missing', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ name: undefined }));
 
       expect(res.status).toBe(400);
@@ -43,7 +46,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 400 when quantity is not positive', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ quantity: -1 }));
 
       expect(res.status).toBe(400);
@@ -52,7 +55,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 400 when unit is not a valid enum value', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ unit: 'BOXES' }));
 
       expect(res.status).toBe(400);
@@ -60,7 +63,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 400 when bestBefore is not a valid date', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ bestBefore: 'not-a-date' }));
 
       expect(res.status).toBe(400);
@@ -68,7 +71,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 400 when bestBefore is in the past', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ bestBefore: '2020-01-01T00:00:00.000Z' }));
 
       expect(res.status).toBe(400);
@@ -77,7 +80,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 400 when quantity exceeds the maximum', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ quantity: 200_000 }));
 
       expect(res.status).toBe(400);
@@ -86,7 +89,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('trims leading/trailing whitespace from name', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ name: '  Eggs  ' }));
 
       expect(res.status).toBe(201);
@@ -95,7 +98,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('accepts and returns an optional minimumQuantity', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ minimumQuantity: 6 }));
 
       expect(res.status).toBe(201);
@@ -104,7 +107,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 400 when minimumQuantity is negative', async () => {
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ minimumQuantity: -1 }));
 
       expect(res.status).toBe(400);
@@ -112,10 +115,10 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('returns 409 when an item with the same name already exists in the same location', async () => {
-      await request(app).post('/api/v1/food-items').send(makeCreateFoodItemInput({ name: 'Eggs', location: 'FRIDGE' }));
+      await request(app).post('/api/v1/food-items').set('Authorization', authHeader).send(makeCreateFoodItemInput({ name: 'Eggs', location: 'FRIDGE' }));
 
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ name: 'eggs', location: 'FRIDGE' }));
 
       expect(res.status).toBe(409);
@@ -123,10 +126,10 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('allows the same name in a different location', async () => {
-      await request(app).post('/api/v1/food-items').send(makeCreateFoodItemInput({ name: 'Eggs', location: 'FRIDGE' }));
+      await request(app).post('/api/v1/food-items').set('Authorization', authHeader).send(makeCreateFoodItemInput({ name: 'Eggs', location: 'FRIDGE' }));
 
       const res = await request(app)
-        .post('/api/v1/food-items')
+        .post('/api/v1/food-items').set('Authorization', authHeader)
         .send(makeCreateFoodItemInput({ name: 'Eggs', location: 'PANTRY' }));
 
       expect(res.status).toBe(201);
@@ -135,17 +138,17 @@ describe('FoodItemController (HTTP)', () => {
 
   describe('GET /api/v1/food-items', () => {
     it('returns an empty envelope when no items exist', async () => {
-      const res = await request(app).get('/api/v1/food-items');
+      const res = await request(app).get('/api/v1/food-items').set('Authorization', authHeader);
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ data: [], total: 0, page: 1, limit: 20 });
     });
 
     it('returns all seeded items within the default page', async () => {
-      await seedFoodItem(repo, { id: '11111111-1111-1111-1111-111111111111', name: 'Milk' });
-      await seedFoodItem(repo, { id: '22222222-2222-2222-2222-222222222222', name: 'Cheese' });
+      await seedFoodItem(repo, { userId,  id: '11111111-1111-1111-1111-111111111111', name: 'Milk' });
+      await seedFoodItem(repo, { userId,  id: '22222222-2222-2222-2222-222222222222', name: 'Cheese' });
 
-      const res = await request(app).get('/api/v1/food-items');
+      const res = await request(app).get('/api/v1/food-items').set('Authorization', authHeader);
 
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(2);
@@ -155,18 +158,18 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('filters by location query param', async () => {
-      await seedFoodItem(repo, {
+      await seedFoodItem(repo, { userId, 
         id: '11111111-1111-1111-1111-111111111111',
         name: 'Milk',
         location: 'FRIDGE',
       });
-      await seedFoodItem(repo, {
+      await seedFoodItem(repo, { userId, 
         id: '22222222-2222-2222-2222-222222222222',
         name: 'Peas',
         location: 'FREEZER',
       });
 
-      const res = await request(app).get('/api/v1/food-items').query({ location: 'FREEZER' });
+      const res = await request(app).get('/api/v1/food-items').set('Authorization', authHeader).query({ location: 'FREEZER' });
 
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
@@ -175,10 +178,10 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('filters by name query param (partial match)', async () => {
-      await seedFoodItem(repo, { id: '11111111-1111-1111-1111-111111111111', name: 'Whole Milk' });
-      await seedFoodItem(repo, { id: '22222222-2222-2222-2222-222222222222', name: 'Cheddar Cheese' });
+      await seedFoodItem(repo, { userId,  id: '11111111-1111-1111-1111-111111111111', name: 'Whole Milk' });
+      await seedFoodItem(repo, { userId,  id: '22222222-2222-2222-2222-222222222222', name: 'Cheddar Cheese' });
 
-      const res = await request(app).get('/api/v1/food-items').query({ name: 'milk' });
+      const res = await request(app).get('/api/v1/food-items').set('Authorization', authHeader).query({ name: 'milk' });
 
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
@@ -187,7 +190,7 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 400 when filter has an invalid category', async () => {
       const res = await request(app)
-        .get('/api/v1/food-items')
+        .get('/api/v1/food-items').set('Authorization', authHeader)
         .query({ category: 'NOT_A_CATEGORY' });
 
       expect(res.status).toBe(400);
@@ -196,21 +199,21 @@ describe('FoodItemController (HTTP)', () => {
 
     it('paginates results according to page and limit', async () => {
       for (let i = 0; i < 25; i += 1) {
-        await seedFoodItem(repo, {
+        await seedFoodItem(repo, { userId, 
           id: `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
           name: `Item ${i}`,
           bestBefore: new Date(Date.now() + i * 86_400_000),
         });
       }
 
-      const page1 = await request(app).get('/api/v1/food-items').query({ page: 1, limit: 10 });
+      const page1 = await request(app).get('/api/v1/food-items').set('Authorization', authHeader).query({ page: 1, limit: 10 });
       expect(page1.status).toBe(200);
       expect(page1.body.data).toHaveLength(10);
       expect(page1.body.total).toBe(25);
       expect(page1.body.page).toBe(1);
       expect(page1.body.limit).toBe(10);
 
-      const page3 = await request(app).get('/api/v1/food-items').query({ page: 3, limit: 10 });
+      const page3 = await request(app).get('/api/v1/food-items').set('Authorization', authHeader).query({ page: 3, limit: 10 });
       expect(page3.status).toBe(200);
       expect(page3.body.data).toHaveLength(5);
       expect(page3.body.total).toBe(25);
@@ -218,24 +221,24 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('combines pagination with filters, reporting a filtered total', async () => {
-      await seedFoodItem(repo, {
+      await seedFoodItem(repo, { userId, 
         id: '11111111-1111-1111-1111-111111111111',
         name: 'Milk',
         location: 'FRIDGE',
       });
-      await seedFoodItem(repo, {
+      await seedFoodItem(repo, { userId, 
         id: '22222222-2222-2222-2222-222222222222',
         name: 'Peas',
         location: 'FREEZER',
       });
-      await seedFoodItem(repo, {
+      await seedFoodItem(repo, { userId, 
         id: '33333333-3333-3333-3333-333333333333',
         name: 'Corn',
         location: 'FREEZER',
       });
 
       const res = await request(app)
-        .get('/api/v1/food-items')
+        .get('/api/v1/food-items').set('Authorization', authHeader)
         .query({ location: 'FREEZER', page: 1, limit: 1 });
 
       expect(res.status).toBe(200);
@@ -244,14 +247,14 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('returns 400 when limit exceeds the maximum', async () => {
-      const res = await request(app).get('/api/v1/food-items').query({ limit: 1000 });
+      const res = await request(app).get('/api/v1/food-items').set('Authorization', authHeader).query({ limit: 1000 });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Validation Error');
     });
 
     it('returns 400 when page is not a positive integer', async () => {
-      const res = await request(app).get('/api/v1/food-items').query({ page: 0 });
+      const res = await request(app).get('/api/v1/food-items').set('Authorization', authHeader).query({ page: 0 });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Validation Error');
@@ -261,9 +264,9 @@ describe('FoodItemController (HTTP)', () => {
 
   describe('GET /api/v1/food-items/:id', () => {
     it('returns the item when found', async () => {
-      const item = await seedFoodItem(repo);
+      const item = await seedFoodItem(repo, { userId });
 
-      const res = await request(app).get(`/api/v1/food-items/${item.id}`);
+      const res = await request(app).get(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader);
 
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(item.id);
@@ -271,7 +274,7 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('returns 404 when the item does not exist', async () => {
-      const res = await request(app).get('/api/v1/food-items/99999999-9999-9999-9999-999999999999');
+      const res = await request(app).get('/api/v1/food-items/99999999-9999-9999-9999-999999999999').set('Authorization', authHeader);
 
       expect(res.status).toBe(404);
       expect(res.body.error).toEqual(expect.any(String));
@@ -280,10 +283,10 @@ describe('FoodItemController (HTTP)', () => {
 
   describe('PATCH /api/v1/food-items/:id', () => {
     it('updates and returns the item on valid partial body', async () => {
-      const item = await seedFoodItem(repo, { quantity: 1 });
+      const item = await seedFoodItem(repo, { userId,  quantity: 1 });
 
       const res = await request(app)
-        .patch(`/api/v1/food-items/${item.id}`)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
         .send({ quantity: 5 });
 
       expect(res.status).toBe(200);
@@ -293,17 +296,17 @@ describe('FoodItemController (HTTP)', () => {
 
     it('returns 404 when the item does not exist', async () => {
       const res = await request(app)
-        .patch('/api/v1/food-items/99999999-9999-9999-9999-999999999999')
+        .patch('/api/v1/food-items/99999999-9999-9999-9999-999999999999').set('Authorization', authHeader)
         .send({ quantity: 5 });
 
       expect(res.status).toBe(404);
     });
 
     it('returns 400 when the update body is invalid', async () => {
-      const item = await seedFoodItem(repo);
+      const item = await seedFoodItem(repo, { userId });
 
       const res = await request(app)
-        .patch(`/api/v1/food-items/${item.id}`)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
         .send({ quantity: -5 });
 
       expect(res.status).toBe(400);
@@ -311,10 +314,10 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('updates minimumQuantity', async () => {
-      const item = await seedFoodItem(repo);
+      const item = await seedFoodItem(repo, { userId });
 
       const res = await request(app)
-        .patch(`/api/v1/food-items/${item.id}`)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
         .send({ minimumQuantity: 3 });
 
       expect(res.status).toBe(200);
@@ -322,10 +325,10 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('returns 400 when bestBefore is updated to a past date', async () => {
-      const item = await seedFoodItem(repo);
+      const item = await seedFoodItem(repo, { userId });
 
       const res = await request(app)
-        .patch(`/api/v1/food-items/${item.id}`)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
         .send({ bestBefore: '2020-01-01T00:00:00.000Z' });
 
       expect(res.status).toBe(400);
@@ -333,14 +336,14 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('does not conflict when updating a field other than name/location on an item that already has that name', async () => {
-      const item = await seedFoodItem(repo, {
+      const item = await seedFoodItem(repo, { userId, 
         id: '11111111-1111-1111-1111-111111111111',
         name: 'Milk',
         location: 'FRIDGE',
       });
 
       const res = await request(app)
-        .patch(`/api/v1/food-items/${item.id}`)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
         .send({ quantity: 3 });
 
       expect(res.status).toBe(200);
@@ -348,19 +351,19 @@ describe('FoodItemController (HTTP)', () => {
     });
 
     it('returns 409 when renaming an item to collide with another item in the same location', async () => {
-      await seedFoodItem(repo, {
+      await seedFoodItem(repo, { userId, 
         id: '11111111-1111-1111-1111-111111111111',
         name: 'Milk',
         location: 'FRIDGE',
       });
-      const cheese = await seedFoodItem(repo, {
+      const cheese = await seedFoodItem(repo, { userId, 
         id: '22222222-2222-2222-2222-222222222222',
         name: 'Cheese',
         location: 'FRIDGE',
       });
 
       const res = await request(app)
-        .patch(`/api/v1/food-items/${cheese.id}`)
+        .patch(`/api/v1/food-items/${cheese.id}`).set('Authorization', authHeader)
         .send({ name: 'milk' });
 
       expect(res.status).toBe(409);
@@ -369,16 +372,16 @@ describe('FoodItemController (HTTP)', () => {
 
   describe('DELETE /api/v1/food-items/:id', () => {
     it('deletes the item and returns 204', async () => {
-      const item = await seedFoodItem(repo);
+      const item = await seedFoodItem(repo, { userId });
 
-      const res = await request(app).delete(`/api/v1/food-items/${item.id}`);
+      const res = await request(app).delete(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader);
 
       expect(res.status).toBe(204);
-      expect(await repo.findById(item.id)).toBeNull();
+      expect(await repo.findById(item.id, userId)).toBeNull();
     });
 
     it('returns 404 when the item does not exist', async () => {
-      const res = await request(app).delete('/api/v1/food-items/99999999-9999-9999-9999-999999999999');
+      const res = await request(app).delete('/api/v1/food-items/99999999-9999-9999-9999-999999999999').set('Authorization', authHeader);
 
       expect(res.status).toBe(404);
     });

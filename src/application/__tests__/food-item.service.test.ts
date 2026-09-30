@@ -3,8 +3,11 @@ import { FoodItemService, NotFoundError, ConflictError } from '../food-item.serv
 import type { FoodItemRepositoryPort } from '../../core/ports/outbound/food-item.repository.port.js';
 import type { FoodItem } from '../../core/domain/food-item.js';
 
+const USER_ID = 'user-0000-0000-0000-0000-000000000001';
+
 const makeItem = (overrides?: Partial<FoodItem>): FoodItem => ({
   id: '00000000-0000-0000-0000-000000000001',
+  userId: USER_ID,
   name: 'Eggs',
   quantity: 12,
   unit: 'UNITS',
@@ -51,7 +54,7 @@ describe('FoodItemService', () => {
       vi.mocked(repo.findByNameAndLocation).mockResolvedValue(null);
       vi.mocked(repo.save).mockResolvedValue(expected);
 
-      const result = await service.addItem(input);
+      const result = await service.addItem(USER_ID, input);
 
       expect(repo.save).toHaveBeenCalledOnce();
       expect(result).toEqual(expected);
@@ -68,7 +71,7 @@ describe('FoodItemService', () => {
       };
       vi.mocked(repo.findByNameAndLocation).mockResolvedValue(makeItem());
 
-      await expect(service.addItem(input)).rejects.toThrow(ConflictError);
+      await expect(service.addItem(USER_ID, input)).rejects.toThrow(ConflictError);
       expect(repo.save).not.toHaveBeenCalled();
     });
 
@@ -85,7 +88,7 @@ describe('FoodItemService', () => {
       vi.mocked(repo.findByNameAndLocation).mockResolvedValue(null);
       vi.mocked(repo.save).mockImplementation(async (item) => item);
 
-      const result = await service.addItem(input);
+      const result = await service.addItem(USER_ID, input);
 
       expect(result.minimumQuantity).toBe(6);
     });
@@ -96,14 +99,14 @@ describe('FoodItemService', () => {
       const item = makeItem();
       vi.mocked(repo.findById).mockResolvedValue(item);
 
-      const result = await service.getItem(item.id);
+      const result = await service.getItem(item.id, USER_ID);
       expect(result).toEqual(item);
     });
 
     it('throws NotFoundError when item does not exist', async () => {
       vi.mocked(repo.findById).mockResolvedValue(null);
 
-      await expect(service.getItem('missing-id')).rejects.toThrow(NotFoundError);
+      await expect(service.getItem('missing-id', USER_ID)).rejects.toThrow(NotFoundError);
     });
   });
 
@@ -111,9 +114,9 @@ describe('FoodItemService', () => {
     it('throws NotFoundError when item does not exist', async () => {
       vi.mocked(repo.findById).mockResolvedValue(null);
 
-      await expect(service.updateItem('missing-id', { quantity: 5 })).rejects.toThrow(
-        NotFoundError,
-      );
+      await expect(
+        service.updateItem('missing-id', USER_ID, { quantity: 5 }),
+      ).rejects.toThrow(NotFoundError);
     });
 
     it('updates when name/location are unchanged', async () => {
@@ -121,7 +124,7 @@ describe('FoodItemService', () => {
       vi.mocked(repo.findById).mockResolvedValue(existing);
       vi.mocked(repo.update).mockResolvedValue({ ...existing, quantity: 3 });
 
-      const result = await service.updateItem(existing.id, { quantity: 3 });
+      const result = await service.updateItem(existing.id, USER_ID, { quantity: 3 });
 
       expect(repo.findByNameAndLocation).not.toHaveBeenCalled();
       expect(result.quantity).toBe(3);
@@ -132,9 +135,9 @@ describe('FoodItemService', () => {
       vi.mocked(repo.findById).mockResolvedValue(existing);
       vi.mocked(repo.findByNameAndLocation).mockResolvedValue(makeItem({ id: 'other-id' }));
 
-      await expect(service.updateItem(existing.id, { name: 'Milk' })).rejects.toThrow(
-        ConflictError,
-      );
+      await expect(
+        service.updateItem(existing.id, USER_ID, { name: 'Milk' }),
+      ).rejects.toThrow(ConflictError);
       expect(repo.update).not.toHaveBeenCalled();
     });
 
@@ -144,9 +147,14 @@ describe('FoodItemService', () => {
       vi.mocked(repo.findByNameAndLocation).mockResolvedValue(null);
       vi.mocked(repo.update).mockResolvedValue({ ...existing, name: 'Milk' });
 
-      const result = await service.updateItem(existing.id, { name: 'Milk' });
+      const result = await service.updateItem(existing.id, USER_ID, { name: 'Milk' });
 
-      expect(repo.findByNameAndLocation).toHaveBeenCalledWith('Milk', existing.location, existing.id);
+      expect(repo.findByNameAndLocation).toHaveBeenCalledWith(
+        USER_ID,
+        'Milk',
+        existing.location,
+        existing.id,
+      );
       expect(result.name).toBe('Milk');
     });
   });
@@ -154,12 +162,12 @@ describe('FoodItemService', () => {
   describe('removeItem', () => {
     it('resolves when item is deleted', async () => {
       vi.mocked(repo.delete).mockResolvedValue(true);
-      await expect(service.removeItem('some-id')).resolves.toBeUndefined();
+      await expect(service.removeItem('some-id', USER_ID)).resolves.toBeUndefined();
     });
 
     it('throws NotFoundError when item does not exist', async () => {
       vi.mocked(repo.delete).mockResolvedValue(false);
-      await expect(service.removeItem('missing-id')).rejects.toThrow(NotFoundError);
+      await expect(service.removeItem('missing-id', USER_ID)).rejects.toThrow(NotFoundError);
     });
   });
 
@@ -168,9 +176,9 @@ describe('FoodItemService', () => {
       const expected = { data: [makeItem()], total: 1, page: 1, limit: 20 };
       vi.mocked(repo.findAllPaginated).mockResolvedValue(expected);
 
-      const result = await service.listItemsPaginated({}, { page: 1, limit: 20 });
+      const result = await service.listItemsPaginated(USER_ID, {}, { page: 1, limit: 20 });
 
-      expect(repo.findAllPaginated).toHaveBeenCalledWith({}, { page: 1, limit: 20 });
+      expect(repo.findAllPaginated).toHaveBeenCalledWith(USER_ID, {}, { page: 1, limit: 20 });
       expect(result).toEqual(expected);
     });
   });

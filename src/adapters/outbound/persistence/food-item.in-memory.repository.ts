@@ -36,22 +36,25 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
     return clone(item);
   }
 
-  async findById(id: string): Promise<FoodItem | null> {
+  async findById(id: string, userId: string): Promise<FoodItem | null> {
     const item = this.items.get(id);
-    return item ? clone(item) : null;
+    return item && item.userId === userId ? clone(item) : null;
   }
 
-  async findAll(filter?: FoodItemFilter): Promise<FoodItem[]> {
-    const results = applyFilter(Array.from(this.items.values()), filter);
+  async findAll(userId: string, filter?: FoodItemFilter): Promise<FoodItem[]> {
+    const owned = Array.from(this.items.values()).filter((item) => item.userId === userId);
+    const results = applyFilter(owned, filter);
     results.sort((a, b) => a.bestBefore.getTime() - b.bestBefore.getTime());
     return results.map(clone);
   }
 
   async findAllPaginated(
+    userId: string,
     filter: FoodItemFilter,
     pagination: PaginationInput,
   ): Promise<PaginatedResult<FoodItem>> {
-    const results = applyFilter(Array.from(this.items.values()), filter);
+    const owned = Array.from(this.items.values()).filter((item) => item.userId === userId);
+    const results = applyFilter(owned, filter);
     results.sort((a, b) => a.bestBefore.getTime() - b.bestBefore.getTime());
 
     const total = results.length;
@@ -63,6 +66,7 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
   }
 
   async findByNameAndLocation(
+    userId: string,
     name: string,
     location: Location,
     excludeId?: string,
@@ -70,6 +74,7 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
     const needle = name.toLowerCase();
     const match = Array.from(this.items.values()).find(
       (item) =>
+        item.userId === userId &&
         item.name.toLowerCase() === needle &&
         item.location === location &&
         item.id !== excludeId,
@@ -77,9 +82,9 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
     return match ? clone(match) : null;
   }
 
-  async update(id: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {
+  async update(id: string, userId: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {
     const existing = this.items.get(id);
-    if (!existing) return null;
+    if (!existing || existing.userId !== userId) return null;
 
     const updated: FoodItem = {
       ...existing,
@@ -91,7 +96,9 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
     return clone(updated);
   }
 
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string, userId: string): Promise<boolean> {
+    const existing = this.items.get(id);
+    if (!existing || existing.userId !== userId) return false;
     return this.items.delete(id);
   }
 

@@ -6,8 +6,11 @@ import { join } from 'node:path';
 import { SqliteFoodItemRepository } from '../food-item.sqlite.repository.js';
 import type { FoodItem } from '../../../../core/domain/food-item.js';
 
+const USER_ID = 'user-0000-0000-0000-0000-000000000001';
+
 const makeItem = (overrides?: Partial<FoodItem>): FoodItem => ({
   id: '00000000-0000-0000-0000-000000000001',
+  userId: USER_ID,
   name: 'Eggs',
   quantity: 12,
   unit: 'UNITS',
@@ -42,7 +45,7 @@ describe('SqliteFoodItemRepository', () => {
         );
       }
 
-      const result = await repo.findAllPaginated({}, { page: 1, limit: 2 });
+      const result = await repo.findAllPaginated(USER_ID, {}, { page: 1, limit: 2 });
 
       expect(result.total).toBe(5);
       expect(result.page).toBe(1);
@@ -63,7 +66,7 @@ describe('SqliteFoodItemRepository', () => {
         );
       }
 
-      const result = await repo.findAllPaginated({}, { page: 3, limit: 2 });
+      const result = await repo.findAllPaginated(USER_ID, {}, { page: 3, limit: 2 });
 
       expect(result.data).toHaveLength(1);
       expect(result.data[0].name).toBe('Item 4');
@@ -74,7 +77,7 @@ describe('SqliteFoodItemRepository', () => {
       await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000031', location: 'FREEZER' }));
       await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000032', location: 'FREEZER' }));
 
-      const result = await repo.findAllPaginated({ location: 'FREEZER' }, { page: 1, limit: 1 });
+      const result = await repo.findAllPaginated(USER_ID, { location: 'FREEZER' }, { page: 1, limit: 1 });
 
       expect(result.total).toBe(2);
       expect(result.data).toHaveLength(1);
@@ -83,7 +86,7 @@ describe('SqliteFoodItemRepository', () => {
     it('returns an empty data array when the page is beyond the available results', async () => {
       await repo.save(makeItem());
 
-      const result = await repo.findAllPaginated({}, { page: 5, limit: 10 });
+      const result = await repo.findAllPaginated(USER_ID, {}, { page: 5, limit: 10 });
 
       expect(result.data).toEqual([]);
       expect(result.total).toBe(1);
@@ -95,14 +98,14 @@ describe('SqliteFoodItemRepository', () => {
       const item = makeItem({ name: 'Eggs', location: 'FRIDGE' });
       await repo.save(item);
 
-      const found = await repo.findByNameAndLocation('eggs', 'FRIDGE');
+      const found = await repo.findByNameAndLocation(USER_ID, 'eggs', 'FRIDGE');
       expect(found?.id).toBe(item.id);
     });
 
     it('returns null when the name matches but the location differs', async () => {
       await repo.save(makeItem({ name: 'Eggs', location: 'FRIDGE' }));
 
-      const found = await repo.findByNameAndLocation('Eggs', 'PANTRY');
+      const found = await repo.findByNameAndLocation(USER_ID, 'Eggs', 'PANTRY');
       expect(found).toBeNull();
     });
 
@@ -110,7 +113,7 @@ describe('SqliteFoodItemRepository', () => {
       const item = makeItem({ name: 'Eggs', location: 'FRIDGE' });
       await repo.save(item);
 
-      const found = await repo.findByNameAndLocation('Eggs', 'FRIDGE', item.id);
+      const found = await repo.findByNameAndLocation(USER_ID, 'Eggs', 'FRIDGE', item.id);
       expect(found).toBeNull();
     });
   });
@@ -120,7 +123,7 @@ describe('SqliteFoodItemRepository', () => {
       const item = makeItem({ minimumQuantity: 6 });
       await repo.save(item);
 
-      const found = await repo.findById(item.id);
+      const found = await repo.findById(item.id, USER_ID);
       expect(found?.minimumQuantity).toBe(6);
     });
 
@@ -128,7 +131,7 @@ describe('SqliteFoodItemRepository', () => {
       const item = makeItem();
       await repo.save(item);
 
-      const found = await repo.findById(item.id);
+      const found = await repo.findById(item.id, USER_ID);
       expect(found?.minimumQuantity).toBeUndefined();
     });
 
@@ -136,10 +139,10 @@ describe('SqliteFoodItemRepository', () => {
       const item = makeItem({ minimumQuantity: 6 });
       await repo.save(item);
 
-      const updated = await repo.update(item.id, { minimumQuantity: 2 });
+      const updated = await repo.update(item.id, USER_ID, { minimumQuantity: 2 });
       expect(updated?.minimumQuantity).toBe(2);
 
-      const found = await repo.findById(item.id);
+      const found = await repo.findById(item.id, USER_ID);
       expect(found?.minimumQuantity).toBe(2);
     });
   });
@@ -180,6 +183,80 @@ describe('SqliteFoodItemRepository', () => {
         }[];
         expect(columnsAfter.some((c) => c.name === 'minimum_quantity')).toBe(true);
         migratedRepo.close();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('adds the user_id column (and index) to a pre-existing database missing it', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'myfood-service-test-'));
+      const path = join(dir, 'legacy-user.db');
+
+      try {
+        const legacyDb = new Database(path);
+        legacyDb.exec(`
+          CREATE TABLE food_items (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            quantity    REAL NOT NULL,
+            unit        TEXT NOT NULL,
+            location    TEXT NOT NULL,
+            category    TEXT NOT NULL,
+            best_before TEXT NOT NULL,
+            added_at    TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            notes       TEXT,
+            minimum_quantity REAL
+          )
+        `);
+
+        const columnsBefore = legacyDb.prepare('PRAGMA table_info(food_items)').all() as {
+          name: string;
+        }[];
+        expect(columnsBefore.some((c) => c.name === 'user_id')).toBe(false);
+        legacyDb.close();
+
+        const migratedRepo = new SqliteFoodItemRepository(path);
+        const columnsAfter = new Database(path).prepare('PRAGMA table_info(food_items)').all() as {
+          name: string;
+        }[];
+        expect(columnsAfter.some((c) => c.name === 'user_id')).toBe(true);
+        migratedRepo.close();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('throws at startup if the legacy database has rows with no user_id', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'myfood-service-test-'));
+      const path = join(dir, 'legacy-orphaned.db');
+
+      try {
+        const legacyDb = new Database(path);
+        legacyDb.exec(`
+          CREATE TABLE food_items (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            quantity    REAL NOT NULL,
+            unit        TEXT NOT NULL,
+            location    TEXT NOT NULL,
+            category    TEXT NOT NULL,
+            best_before TEXT NOT NULL,
+            added_at    TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            notes       TEXT,
+            minimum_quantity REAL
+          )
+        `);
+        legacyDb
+          .prepare(
+            `INSERT INTO food_items (id, name, quantity, unit, location, category, best_before, added_at, updated_at)
+             VALUES ('orphan-1', 'Old Eggs', 1, 'UNITS', 'FRIDGE', 'OTHER', '2099-01-01', '2020-01-01', '2020-01-01')`,
+          )
+          .run();
+        legacyDb.close();
+
+        expect(() => new SqliteFoodItemRepository(path)).toThrow(/user_id/);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

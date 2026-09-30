@@ -5,6 +5,7 @@ const MAX_QUANTITY = 100_000;
 
 export const FoodItemSchema = z.object({
   id: z.string().uuid(),
+  userId: z.string().uuid(),
   name: z.string().trim().min(1).max(200),
   quantity: z.number().positive().max(MAX_QUANTITY),
   unit: UnitSchema,
@@ -21,6 +22,7 @@ export type FoodItem = z.infer<typeof FoodItemSchema>;
 
 export const CreateFoodItemSchema = FoodItemSchema.omit({
   id: true,
+  userId: true,
   addedAt: true,
   updatedAt: true,
 }).refine((data) => data.bestBefore.getTime() > Date.now(), {
@@ -31,6 +33,7 @@ export type CreateFoodItemInput = z.infer<typeof CreateFoodItemSchema>;
 
 export const UpdateFoodItemSchema = FoodItemSchema.omit({
   id: true,
+  userId: true,
   addedAt: true,
   updatedAt: true,
 })

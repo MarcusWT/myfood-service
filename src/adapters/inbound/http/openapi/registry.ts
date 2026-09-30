@@ -5,6 +5,7 @@ import {
   CreateFoodItemSchema,
   UpdateFoodItemSchema,
 } from '../../../../core/domain/food-item.js';
+import { RegisterInputSchema, LoginInputSchema } from '../../../../core/domain/user.js';
 import { AlertQuerySchema } from '../expiry-alert.controller.js';
 import { RecipeQuerySchema } from '../recipe.controller.js';
 
@@ -14,6 +15,13 @@ import { RecipeQuerySchema } from '../recipe.controller.js';
 extendZodWithOpenApi(z);
 
 export const registry = new OpenAPIRegistry();
+
+const bearerAuth = registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  bearerFormat: 'JWT',
+});
+const authSecurity = [{ [bearerAuth.name]: [] }];
 
 // ---------------------------------------------------------------------------
 // Reusable component schemas
@@ -144,6 +152,40 @@ const IdParam = z.object({
   id: z.string().uuid().openapi({ param: { name: 'id', in: 'path' } }),
 });
 
+const PublicUserComponent = registry.register(
+  'PublicUser',
+  z
+    .object({
+      id: z.string().uuid(),
+      email: z.string().email(),
+    })
+    .openapi('PublicUser'),
+);
+
+const AuthResultComponent = registry.register(
+  'AuthResult',
+  z
+    .object({
+      token: z.string(),
+      user: PublicUserComponent,
+    })
+    .openapi('AuthResult'),
+);
+
+const UnauthorizedErrorComponent = registry.register(
+  'UnauthorizedError',
+  z
+    .object({
+      error: z.string(),
+    })
+    .openapi('UnauthorizedError'),
+);
+
+const unauthorized = {
+  description: 'Missing, invalid, or expired credentials',
+  content: { 'application/json': { schema: UnauthorizedErrorComponent } },
+};
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -171,9 +213,52 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'post',
+  path: '/auth/register',
+  tags: ['Auth'],
+  summary: 'Register a new user account',
+  request: {
+    body: {
+      content: { 'application/json': { schema: RegisterInputSchema } },
+    },
+  },
+  responses: {
+    201: {
+      description: 'User registered',
+      content: { 'application/json': { schema: AuthResultComponent } },
+    },
+    400: badRequest,
+    409: conflict,
+    500: internalError,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/auth/login',
+  tags: ['Auth'],
+  summary: 'Log in with email and password',
+  request: {
+    body: {
+      content: { 'application/json': { schema: LoginInputSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Login successful',
+      content: { 'application/json': { schema: AuthResultComponent } },
+    },
+    400: badRequest,
+    401: unauthorized,
+    500: internalError,
+  },
+});
+
+registry.registerPath({
+  method: 'post',
   path: '/food-items',
   tags: ['Food Items'],
   summary: 'Add a new food item',
+  security: authSecurity,
   request: {
     body: {
       content: { 'application/json': { schema: CreateFoodItemSchema } },
@@ -185,6 +270,7 @@ registry.registerPath({
       content: { 'application/json': { schema: FoodItemComponent } },
     },
     400: badRequest,
+    401: unauthorized,
     409: conflict,
     500: internalError,
   },
@@ -195,6 +281,7 @@ registry.registerPath({
   path: '/food-items',
   tags: ['Food Items'],
   summary: 'List food items (paginated, filterable)',
+  security: authSecurity,
   request: {
     query: z.object({
       location: z.string().optional(),
@@ -210,6 +297,7 @@ registry.registerPath({
       content: { 'application/json': { schema: PaginatedFoodItemsComponent } },
     },
     400: badRequest,
+    401: unauthorized,
     500: internalError,
   },
 });
@@ -219,12 +307,14 @@ registry.registerPath({
   path: '/food-items/{id}',
   tags: ['Food Items'],
   summary: 'Get a single food item by id',
+  security: authSecurity,
   request: { params: IdParam },
   responses: {
     200: {
       description: 'Food item found',
       content: { 'application/json': { schema: FoodItemComponent } },
     },
+    401: unauthorized,
     404: notFound,
     500: internalError,
   },
@@ -235,6 +325,7 @@ registry.registerPath({
   path: '/food-items/{id}',
   tags: ['Food Items'],
   summary: 'Update a food item',
+  security: authSecurity,
   request: {
     params: IdParam,
     body: {
@@ -247,6 +338,7 @@ registry.registerPath({
       content: { 'application/json': { schema: FoodItemComponent } },
     },
     400: badRequest,
+    401: unauthorized,
     404: notFound,
     409: conflict,
     500: internalError,
@@ -258,9 +350,11 @@ registry.registerPath({
   path: '/food-items/{id}',
   tags: ['Food Items'],
   summary: 'Delete a food item',
+  security: authSecurity,
   request: { params: IdParam },
   responses: {
     204: { description: 'Food item deleted' },
+    401: unauthorized,
     404: notFound,
     500: internalError,
   },
@@ -271,6 +365,7 @@ registry.registerPath({
   path: '/alerts/expiry',
   tags: ['Expiry Alerts'],
   summary: 'List expiry alerts for tracked food items',
+  security: authSecurity,
   request: { query: AlertQuerySchema },
   responses: {
     200: {
@@ -278,6 +373,7 @@ registry.registerPath({
       content: { 'application/json': { schema: z.array(ExpiryAlertComponent) } },
     },
     400: badRequest,
+    401: unauthorized,
     500: internalError,
   },
 });
@@ -287,6 +383,7 @@ registry.registerPath({
   path: '/recipes/suggestions',
   tags: ['Recipes'],
   summary: 'Get recipe suggestions based on current food items',
+  security: authSecurity,
   request: { query: RecipeQuerySchema },
   responses: {
     200: {
@@ -294,6 +391,7 @@ registry.registerPath({
       content: { 'application/json': { schema: z.array(RecipeComponent) } },
     },
     400: badRequest,
+    401: unauthorized,
     500: internalError,
   },
 });
@@ -303,11 +401,13 @@ registry.registerPath({
   path: '/shopping/summary',
   tags: ['Shopping Summary'],
   summary: 'Get a shopping summary derived from expiring and low-stock items',
+  security: authSecurity,
   responses: {
     200: {
       description: 'Shopping summary',
       content: { 'application/json': { schema: ShoppingSummaryComponent } },
     },
+    401: unauthorized,
     500: internalError,
   },
 });

@@ -1,15 +1,19 @@
 import { vi } from 'vitest';
 import { Application } from 'express';
+import request from 'supertest';
 import { createApp } from '../app.js';
 import { FoodItemController } from '../food-item.controller.js';
 import { ExpiryAlertController } from '../expiry-alert.controller.js';
 import { RecipeController } from '../recipe.controller.js';
 import { ShoppingSummaryController } from '../shopping-summary.controller.js';
+import { AuthController } from '../auth.controller.js';
 import { FoodItemService } from '../../../../application/food-item.service.js';
 import { ExpiryAlertService } from '../../../../application/expiry-alert.service.js';
 import { RecipeService } from '../../../../application/recipe.service.js';
 import { ShoppingSummaryService } from '../../../../application/shopping-summary.service.js';
+import { AuthService } from '../../../../application/auth.service.js';
 import { InMemoryFoodItemRepository } from '../../../outbound/persistence/food-item.in-memory.repository.js';
+import { InMemoryUserRepository } from '../../../outbound/persistence/user.in-memory.repository.js';
 import type { RecipeProviderPort } from '../../../../core/ports/outbound/recipe-provider.port.js';
 import type { CreateFoodItemInput, FoodItem } from '../../../../core/domain/food-item.js';
 
@@ -27,6 +31,7 @@ export function fakeRecipeProvider(): RecipeProviderPort {
 export interface TestApp {
   app: Application;
   repo: InMemoryFoodItemRepository;
+  userRepo: InMemoryUserRepository;
   recipeProvider: RecipeProviderPort;
 }
 
@@ -38,25 +43,30 @@ export interface TestApp {
  */
 export function buildTestApp(recipeProvider: RecipeProviderPort = fakeRecipeProvider()): TestApp {
   const repo = new InMemoryFoodItemRepository();
+  const userRepo = new InMemoryUserRepository();
 
   const foodItemService = new FoodItemService(repo);
   const expiryAlertService = new ExpiryAlertService(repo);
   const recipeService = new RecipeService(repo, recipeProvider);
   const shoppingSummaryService = new ShoppingSummaryService(repo);
+  const authService = new AuthService(userRepo, 'test-secret-not-for-production', '24h');
 
   const foodItemController = new FoodItemController(foodItemService);
   const expiryAlertController = new ExpiryAlertController(expiryAlertService);
   const recipeController = new RecipeController(recipeService);
   const shoppingSummaryController = new ShoppingSummaryController(shoppingSummaryService);
+  const authController = new AuthController(authService);
 
   const app = createApp(
     foodItemController,
     expiryAlertController,
     recipeController,
     shoppingSummaryController,
+    authController,
+    authService,
   );
 
-  return { app, repo, recipeProvider };
+  return { app, repo, userRepo, recipeProvider };
 }
 
 /**
@@ -88,6 +98,7 @@ export async function seedFoodItem(
   const now = new Date('2026-08-01T00:00:00.000Z');
   const item: FoodItem = {
     id: '11111111-1111-1111-1111-111111111111',
+    userId: overrides?.userId ?? '22222222-2222-2222-2222-222222222222',
     name: 'Milk',
     quantity: 1,
     unit: 'LITRES',
@@ -99,4 +110,31 @@ export async function seedFoodItem(
     ...overrides,
   };
   return repo.save(item);
+}
+
+let registrationCounter = 0;
+
+/**
+ * Registers (and logs in) a fresh test user against the given app, returning
+ * the user's id and an `Authorization: Bearer <token>` header value ready to
+ * spread into supertest `.set()` calls.
+ */
+export async function registerTestUser(
+  app: Application,
+  overrides?: { email?: string; password?: string },
+): Promise<{ userId: string; token: string; authHeader: string }> {
+  registrationCounter += 1;
+  const email = overrides?.email ?? `test-user-${registrationCounter}@example.com`;
+  const password = overrides?.password ?? 'password123';
+
+  const res = await request(app).post('/api/v1/auth/register').send({ email, password });
+  if (res.status !== 201) {
+    throw new Error(`Failed to register test user: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+
+  return {
+    userId: res.body.user.id,
+    token: res.body.token,
+    authHeader: `Bearer ${res.body.token}`,
+  };
 }

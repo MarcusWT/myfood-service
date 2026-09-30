@@ -13,7 +13,7 @@ export class FoodItemController {
   addItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const input = CreateFoodItemSchema.parse(req.body);
-      const item = await this.service.addItem(input);
+      const item = await this.service.addItem(req.userId!, input);
       res.status(201).json(item);
     } catch (err) {
       next(err);
@@ -22,7 +22,7 @@ export class FoodItemController {
 
   getItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const item = await this.service.getItem(req.params.id);
+      const item = await this.service.getItem(req.params.id, req.userId!);
       res.json(item);
     } catch (err) {
       next(err);
@@ -33,7 +33,7 @@ export class FoodItemController {
     try {
       const filter = FoodItemFilterSchema.parse(req.query);
       const pagination = PaginationSchema.parse(req.query);
-      const result = await this.service.listItemsPaginated(filter, pagination);
+      const result = await this.service.listItemsPaginated(req.userId!, filter, pagination);
       res.json(result);
     } catch (err) {
       next(err);
@@ -43,7 +43,7 @@ export class FoodItemController {
   updateItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const input = UpdateFoodItemSchema.parse(req.body);
-      const item = await this.service.updateItem(req.params.id, input);
+      const item = await this.service.updateItem(req.params.id, req.userId!, input);
       res.json(item);
     } catch (err) {
       next(err);
@@ -52,7 +52,7 @@ export class FoodItemController {
 
   removeItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      await this.service.removeItem(req.params.id);
+      await this.service.removeItem(req.params.id, req.userId!);
       res.status(204).send();
     } catch (err) {
       next(err);

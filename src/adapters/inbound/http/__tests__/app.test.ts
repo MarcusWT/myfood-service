@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import request from 'supertest';
-import { buildTestApp } from './test-app.js';
+import { buildTestApp, registerTestUser } from './test-app.js';
 import { createApp } from '../app.js';
 import { FoodItemController } from '../food-item.controller.js';
 import { ExpiryAlertController } from '../expiry-alert.controller.js';
 import { RecipeController } from '../recipe.controller.js';
 import { ShoppingSummaryController } from '../shopping-summary.controller.js';
+import { AuthController } from '../auth.controller.js';
+import { AuthService } from '../../../../application/auth.service.js';
+import { InMemoryUserRepository } from '../../../outbound/persistence/user.in-memory.repository.js';
 import type { FoodItemServicePort } from '../../../../core/ports/inbound/food-item.service.port.js';
 import type { ExpiryAlertServicePort } from '../../../../core/ports/inbound/expiry-alert.service.port.js';
 import type { RecipeServicePort } from '../../../../core/ports/inbound/recipe.service.port.js';
@@ -52,15 +55,26 @@ describe('App (cross-cutting)', () => {
       const noopExpiryAlertService: ExpiryAlertServicePort = { getAlerts: vi.fn() };
       const noopRecipeService: RecipeServicePort = { getSuggestions: vi.fn() };
       const noopShoppingSummaryService: ShoppingSummaryServicePort = { getSummary: vi.fn() };
+      const authService = new AuthService(
+        new InMemoryUserRepository(),
+        'test-secret-not-for-production',
+        '24h',
+      );
 
       const app = createApp(
         new FoodItemController(throwingFoodItemService),
         new ExpiryAlertController(noopExpiryAlertService),
         new RecipeController(noopRecipeService),
         new ShoppingSummaryController(noopShoppingSummaryService),
+        new AuthController(authService),
+        authService,
       );
 
-      const res = await request(app).get('/api/v1/food-items');
+      const { authHeader } = await registerTestUser(app);
+
+      const res = await request(app)
+        .get('/api/v1/food-items')
+        .set('Authorization', authHeader);
 
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'Internal Server Error' });

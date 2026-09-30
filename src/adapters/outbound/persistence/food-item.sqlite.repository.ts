@@ -6,6 +6,7 @@ import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.r
 
 interface FoodItemRow {
   id: string;
+  user_id: string | null;
   name: string;
   quantity: number;
   unit: string;
@@ -37,6 +38,7 @@ const CREATE_TABLE_SQL = `
 function rowToFoodItem(row: FoodItemRow): FoodItem {
   return {
     id: row.id,
+    userId: row.user_id ?? '',
     name: row.name,
     quantity: row.quantity,
     unit: row.unit as FoodItem['unit'],
@@ -50,9 +52,12 @@ function rowToFoodItem(row: FoodItemRow): FoodItem {
   };
 }
 
-function buildWhereClause(filter?: FoodItemFilter): { where: string; params: Record<string, string> } {
-  const conditions: string[] = [];
-  const params: Record<string, string> = {};
+function buildWhereClause(
+  userId: string,
+  filter?: FoodItemFilter,
+): { where: string; params: Record<string, string> } {
+  const conditions: string[] = ['user_id = @userId'];
+  const params: Record<string, string> = { userId };
 
   if (filter?.location) {
     conditions.push('location = @location');
@@ -67,7 +72,7 @@ function buildWhereClause(filter?: FoodItemFilter): { where: string; params: Rec
     params.name = `%${filter.name}%`;
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const where = `WHERE ${conditions.join(' AND ')}`;
   return { where, params };
 }
 
@@ -79,6 +84,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     this.db.pragma('journal_mode = WAL');
     this.db.exec(CREATE_TABLE_SQL);
     this.migrateAddMinimumQuantityColumn();
+    this.migrateAddUserIdColumn();
   }
 
   private migrateAddMinimumQuantityColumn(): void {
@@ -88,14 +94,41 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     }
   }
 
+  private migrateAddUserIdColumn(): void {
+    const columns = this.db.prepare('PRAGMA table_info(food_items)').all() as { name: string }[];
+    if (!columns.some((column) => column.name === 'user_id')) {
+      this.db.exec('ALTER TABLE food_items ADD COLUMN user_id TEXT');
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_food_items_user_id ON food_items(user_id)');
+
+    const { count } = this.db
+      .prepare('SELECT COUNT(*) as count FROM food_items WHERE user_id IS NULL')
+      .get() as { count: number };
+    if (count > 0) {
+      // Every read/write/delete query in this repository is scoped with
+      // `WHERE user_id = ?`, and `NULL = ?` is never true in SQL — so rows
+      // left over from before authentication was introduced would otherwise
+      // become permanently invisible (not 404, just silently absent from
+      // every list/get) with no way to reach them through the API. Failing
+      // fast here forces an explicit decision rather than a silent data loss.
+      throw new Error(
+        `[Migration] food_items table has ${count} row(s) with no user_id, left over from ` +
+          'before authentication was added. These rows would become permanently inaccessible ' +
+          'through the API. Assign them to a user manually (e.g. ' +
+          "`UPDATE food_items SET user_id = '<uuid>' WHERE user_id IS NULL`) before starting the server.",
+      );
+    }
+  }
+
   async save(item: FoodItem): Promise<FoodItem> {
     this.db
       .prepare(
-        `INSERT INTO food_items (id, name, quantity, unit, location, category, best_before, added_at, updated_at, notes, minimum_quantity)
-         VALUES (@id, @name, @quantity, @unit, @location, @category, @best_before, @added_at, @updated_at, @notes, @minimum_quantity)`,
+        `INSERT INTO food_items (id, user_id, name, quantity, unit, location, category, best_before, added_at, updated_at, notes, minimum_quantity)
+         VALUES (@id, @user_id, @name, @quantity, @unit, @location, @category, @best_before, @added_at, @updated_at, @notes, @minimum_quantity)`,
       )
       .run({
         id: item.id,
+        user_id: item.userId,
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
@@ -110,15 +143,15 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     return item;
   }
 
-  async findById(id: string): Promise<FoodItem | null> {
+  async findById(id: string, userId: string): Promise<FoodItem | null> {
     const row = this.db
-      .prepare('SELECT * FROM food_items WHERE id = ?')
-      .get(id) as FoodItemRow | undefined;
+      .prepare('SELECT * FROM food_items WHERE id = ? AND user_id = ?')
+      .get(id, userId) as FoodItemRow | undefined;
     return row ? rowToFoodItem(row) : null;
   }
 
-  async findAll(filter?: FoodItemFilter): Promise<FoodItem[]> {
-    const { where, params } = buildWhereClause(filter);
+  async findAll(userId: string, filter?: FoodItemFilter): Promise<FoodItem[]> {
+    const { where, params } = buildWhereClause(userId, filter);
     const rows = this.db
       .prepare(`SELECT * FROM food_items ${where} ORDER BY best_before ASC`)
       .all(params) as FoodItemRow[];
@@ -127,10 +160,11 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
   }
 
   async findAllPaginated(
+    userId: string,
     filter: FoodItemFilter,
     pagination: PaginationInput,
   ): Promise<PaginatedResult<FoodItem>> {
-    const { where, params } = buildWhereClause(filter);
+    const { where, params } = buildWhereClause(userId, filter);
 
     const { count } = this.db
       .prepare(`SELECT COUNT(*) as count FROM food_items ${where}`)
@@ -146,6 +180,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
   }
 
   async findByNameAndLocation(
+    userId: string,
     name: string,
     location: Location,
     excludeId?: string,
@@ -153,14 +188,14 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     const row = this.db
       .prepare(
         `SELECT * FROM food_items
-         WHERE lower(name) = lower(@name) AND location = @location AND id != @excludeId`,
+         WHERE lower(name) = lower(@name) AND location = @location AND user_id = @userId AND id != @excludeId`,
       )
-      .get({ name, location, excludeId: excludeId ?? '' }) as FoodItemRow | undefined;
+      .get({ name, location, userId, excludeId: excludeId ?? '' }) as FoodItemRow | undefined;
     return row ? rowToFoodItem(row) : null;
   }
 
-  async update(id: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {
-    const existing = await this.findById(id);
+  async update(id: string, userId: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {
+    const existing = await this.findById(id, userId);
     if (!existing) return null;
 
     const updated: FoodItem = {
@@ -175,10 +210,11 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
          SET name = @name, quantity = @quantity, unit = @unit, location = @location,
              category = @category, best_before = @best_before, updated_at = @updated_at, notes = @notes,
              minimum_quantity = @minimum_quantity
-         WHERE id = @id`,
+         WHERE id = @id AND user_id = @user_id`,
       )
       .run({
         id: updated.id,
+        user_id: updated.userId,
         name: updated.name,
         quantity: updated.quantity,
         unit: updated.unit,
@@ -193,8 +229,10 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     return updated;
   }
 
-  async delete(id: string): Promise<boolean> {
-    const result = this.db.prepare('DELETE FROM food_items WHERE id = ?').run(id);
+  async delete(id: string, userId: string): Promise<boolean> {
+    const result = this.db
+      .prepare('DELETE FROM food_items WHERE id = ? AND user_id = ?')
+      .run(id, userId);
     return result.changes > 0;
   }
 
