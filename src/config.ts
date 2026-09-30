@@ -19,6 +19,11 @@ export const config = {
     (process.env.NODE_ENV === 'test' ? 'test-secret-not-for-production' : ''),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '24h',
   logLevel: process.env.LOG_LEVEL ?? 'info',
+  rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS ?? 900_000),
+  rateLimitMax: Number(process.env.RATE_LIMIT_MAX ?? 200),
+  authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),
+  recipeRateLimitMax: Number(process.env.RECIPE_RATE_LIMIT_MAX ?? 20),
+  bodyLimit: process.env.BODY_LIMIT ?? '100kb',
 } as const;
 
 if (!config.spoonacularApiKey) {

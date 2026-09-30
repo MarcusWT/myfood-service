@@ -170,13 +170,18 @@ codebase (see individual "Why" sections for the specific gaps observed).
 
 ---
 
-## 15. Rate Limiting & Basic Hardening
+## 15. Rate Limiting & Basic Hardening — ✅ Done
 
 **Why:** The API has no protection against abusive clients, and this becomes more important once auth (item 11) makes per-user resource usage meaningful.
 
-- Add `express-rate-limit` (or similar) on all routes, with a stricter limit on `/recipes/suggestions` since it proxies to the metered Spoonacular API
-- Add `helmet` for standard security headers
-- Add a request body size limit (Express `json({ limit: ... })`) to guard against oversized payloads
+- [x] Added `express-rate-limit`: a general limiter (`RATE_LIMIT_MAX`, default 200/15min/IP) applied to all `/api/v1` routes in `app.ts`, plus a stricter limiter on `/api/v1/recipes/suggestions` (`RECIPE_RATE_LIMIT_MAX`, default 20/15min/IP, since it proxies the metered Spoonacular API) and on `/api/v1/auth/register`/`/api/v1/auth/login` (`AUTH_RATE_LIMIT_MAX`, default 10/15min/IP, to mitigate brute-force/enumeration), both wired in `router.ts` (`src/adapters/inbound/http/middleware/rate-limit.middleware.ts`)
+- [x] Added `helmet`, applied globally in `app.ts` for standard security headers
+- [x] Added a request body size limit via `express.json({ limit: config.bodyLimit })` (`BODY_LIMIT`, default `100kb`)
+- [x] Rate limiting is skipped by default under `NODE_ENV=test` (mirroring the existing morgan/pino test-env suppression patterns) so the 184 pre-existing HTTP integration tests, which fire many rapid sequential requests, are unaffected; a `forceEnable` escape hatch on the limiter factories allows dedicated rate-limit tests to exercise real 429 behaviour without touching global env/config
+- [x] Added `.env.example`/README entries for `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX`, `AUTH_RATE_LIMIT_MAX`, `RECIPE_RATE_LIMIT_MAX`, `BODY_LIMIT`
+- [x] Added tests (`rate-limit.middleware.test.ts`): confirms the real app's limiter is skipped in test env, confirms a low-max limiter does trigger 429, confirms helmet headers (`x-content-type-options`) are present, confirms an oversized JSON body is rejected with 413
+- [x] Hardened after independent review: the original 413 test used a bare throwaway Express app with no `errorHandler` at all, so it never actually exercised the real app's error-handling path — and the real path was broken (body-parser's `PayloadTooLargeError` fell through `error-handler.ts`'s generic branch and returned a raw **500** instead of 413). Fixed by adding an explicit `entity.too.large` check in `error-handler.ts` that returns a structured `413 { error }`, and added a second regression test that POSTs an oversized body through the real `buildTestApp()`/router/error-handler stack to catch this class of bug in future
+- Follow-up flagged by review, not yet addressed: no `app.set('trust proxy', ...)` is configured. Deployed behind a reverse proxy (nginx/ALB/k8s ingress), `express-rate-limit`'s default IP-keying would bucket all clients behind that proxy together (one abusive client could 429-lock out everyone) unless `trust proxy` is configured correctly for the actual deployment topology. Should be addressed (e.g. a `TRUST_PROXY` env var, explicit hop count) before any production deployment behind a proxy — tracked here rather than guessed at, since the correct value depends on infrastructure not yet decided
 
 ---
 

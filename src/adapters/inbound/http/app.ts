@@ -1,8 +1,10 @@
 import express, { Application } from 'express';
+import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import { createRouter } from './router.js';
 import { errorHandler } from './error-handler.js';
 import { requestLogger } from './request-logger.middleware.js';
+import { createGeneralRateLimiter } from './middleware/rate-limit.middleware.js';
 import { FoodItemController } from './food-item.controller.js';
 import { ExpiryAlertController } from './expiry-alert.controller.js';
 import { RecipeController } from './recipe.controller.js';
@@ -11,6 +13,7 @@ import { AuthController } from './auth.controller.js';
 import { generateOpenApiDocument } from './openapi/spec.js';
 import { AuthServicePort } from '../../../core/ports/inbound/auth.port.js';
 import { HealthCheckPort } from '../../../core/ports/outbound/health-check.port.js';
+import { config } from '../../../config.js';
 
 export function createApp(
   foodItemController: FoodItemController,
@@ -23,8 +26,9 @@ export function createApp(
 ): Application {
   const app = express();
 
+  app.use(helmet());
   app.use(requestLogger);
-  app.use(express.json());
+  app.use(express.json({ limit: config.bodyLimit }));
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', service: 'myfood-service', timestamp: new Date().toISOString() });
@@ -53,7 +57,7 @@ export function createApp(
     res.json({ status: 'ok', service: 'myfood-service', timestamp: new Date().toISOString() });
   });
 
-  app.use('/api/v1', createRouter(
+  app.use('/api/v1', createGeneralRateLimiter(), createRouter(
     foodItemController,
     expiryAlertController,
     recipeController,

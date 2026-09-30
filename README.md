@@ -196,6 +196,14 @@ Returns a shopping list summary grouped by category. Includes items that are exp
 | `EXPIRY_ALERT_DEFAULT_DAYS` | `7` | Default alert window in days |
 | `JWT_SECRET` | — | **Required** outside the `test` environment; the app throws at startup if unset |
 | `JWT_EXPIRES_IN` | `24h` | JWT token expiry |
+| `LOG_LEVEL` | `info` | pino log level (`silent` forced in `test` env) |
+| `RATE_LIMIT_WINDOW_MS` | `900000` | Rate limit window (ms) for the general `/api/v1` limiter |
+| `RATE_LIMIT_MAX` | `200` | Max requests per window per IP for all `/api/v1` routes |
+| `AUTH_RATE_LIMIT_MAX` | `10` | Max requests per window per IP for `/auth/register` and `/auth/login` |
+| `RECIPE_RATE_LIMIT_MAX` | `20` | Max requests per window per IP for `/recipes/suggestions` (proxies the metered Spoonacular API) |
+| `BODY_LIMIT` | `100kb` | Max JSON request body size |
+
+Rate limiting is automatically disabled in the `test` environment (`NODE_ENV=test`) so the HTTP integration test suite isn't affected by its own rapid sequential requests.
 
 ---
 
