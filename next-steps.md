@@ -185,13 +185,15 @@ codebase (see individual "Why" sections for the specific gaps observed).
 
 ---
 
-## 16. CI Pipeline
+## 16. CI Pipeline — ✅ Done
 
 **Why:** `lint`, `typecheck`, and `test` all exist as scripts but nothing currently runs them automatically on push/PR.
 
-- Add a GitHub Actions workflow (`.github/workflows/ci.yml`) running `npm ci`, `npm run lint`, `npm run typecheck`, and `npm test` on Node 24
-- Optionally upload `vitest` coverage as a build artifact or badge
-- Gate merges on this workflow passing once the repository has a hosted remote with branch protection
+- [x] Add a GitHub Actions workflow (`.github/workflows/ci.yml`) running `npm ci`, `npm run lint`, `npm run typecheck`, and `npm test` on Node 24 (via `.nvmrc`), on push/PR to any branch
+- [x] Cache npm deps via `actions/setup-node@v4`'s built-in `cache: 'npm'`
+- [x] Add a CI status badge to `README.md`
+- Not done (optional, left for later): uploading `vitest` coverage as a build artifact — `test:coverage` script exists but isn't wired into the workflow
+- Gate merges on this workflow passing once the repository has branch protection configured
 
 ---
 

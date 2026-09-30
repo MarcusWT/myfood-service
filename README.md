@@ -1,5 +1,7 @@
 # MYFood Service
 
+[![CI](https://github.com/MarcusWT/myfood-service/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcusWT/myfood-service/actions/workflows/ci.yml)
+
 A RESTful API service for tracking food items across Fridge, Freezer, and Pantry locations. Includes expiry date alerts, recipe suggestions, and shopping list summaries.
 
 Built with **Node.js 24 LTS**, **TypeScript**, and **Hexagonal Architecture** for extensibility and ease of maintenance.

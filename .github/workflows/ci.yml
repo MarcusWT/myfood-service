@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+        # No env vars/secrets needed here: vitest runs with NODE_ENV=test, and
+        # src/config.ts falls back to a non-production JWT secret in that env.
+        # SPOONACULAR_API_KEY is optional (only logs a warning if unset).
+
+      # Coverage is already configured via `npm run test:coverage` (vitest
+      # --coverage, see vitest.config.ts), but isn't wired into CI yet. If
+      # desired later, add a step running that script and upload the
+      # `coverage/` directory with actions/upload-artifact.
