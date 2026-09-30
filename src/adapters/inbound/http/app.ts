@@ -1,4 +1,5 @@
 import express, { Application } from 'express';
+import cors from 'cors';
 import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import { createRouter } from './router.js';
@@ -25,6 +26,12 @@ export function createApp(
   healthCheckPort: HealthCheckPort,
 ): Application {
   const app = express();
+
+  app.set('trust proxy', config.trustProxy);
+
+  const corsOrigin: string | string[] =
+    config.corsOrigin === '*' ? '*' : config.corsOrigin.split(',').map((o) => o.trim());
+  app.use(cors({ origin: corsOrigin }));
 
   app.use(helmet());
   app.use(requestLogger);
@@ -66,11 +73,12 @@ export function createApp(
     authService,
   ));
 
-  app.get('/api/docs.json', (_req, res) => {
+  app.get('/api/docs.json', createGeneralRateLimiter(), (_req, res) => {
     res.json(generateOpenApiDocument());
   });
   app.use(
     '/api/docs',
+    createGeneralRateLimiter(),
     swaggerUi.serve,
     swaggerUi.setup(undefined, {
       swaggerOptions: { url: '/api/docs.json' },

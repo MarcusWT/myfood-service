@@ -40,9 +40,16 @@ export class NotificationPoller {
     try {
       const users = await this.userRepository.listAll();
       for (const user of users) {
-        const alerts = await this.expiryAlertService.getAlerts(user.id, this.withinDays);
-        if (alerts.length > 0) {
-          await this.notificationPort.notify(alerts);
+        try {
+          const alerts = await this.expiryAlertService.getAlerts(user.id, this.withinDays);
+          if (alerts.length > 0) {
+            await this.notificationPort.notify(alerts);
+          }
+        } catch (err) {
+          logger.error(
+            { err, userId: user.id },
+            '[NotificationPoller] Failed to check expiry alerts for user; continuing with remaining users',
+          );
         }
       }
     } catch (err) {

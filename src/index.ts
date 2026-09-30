@@ -90,11 +90,51 @@ if (config.nodeEnv !== 'test') {
   notificationPoller.start();
 }
 
-process.on('SIGTERM', () => notificationPoller.stop());
-process.on('SIGINT', () => notificationPoller.stop());
-
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   logger.info(`[MYFood Service] Listening on port ${config.port}`);
   logger.info(`[MYFood Service] Database: ${config.dbPath}`);
   logger.info(`[MYFood Service] Health: http://localhost:${config.port}/health`);
 });
+
+function closeIfPossible(repo: unknown): void {
+  if (repo !== null && typeof repo === 'object' && 'close' in repo && typeof (repo as { close: unknown }).close === 'function') {
+    (repo as { close: () => void }).close();
+  }
+}
+
+let isShuttingDown = false;
+
+function shutdown(signal: string): void {
+  if (isShuttingDown) {
+    logger.info(`[MYFood Service] Received ${signal} during shutdown, ignoring duplicate signal.`);
+    return;
+  }
+  isShuttingDown = true;
+
+  logger.info(`[MYFood Service] Received ${signal}, shutting down gracefully...`);
+  notificationPoller.stop();
+
+  const forceExitTimer = setTimeout(() => {
+    logger.error('[MYFood Service] Graceful shutdown timed out, forcing exit.');
+    process.exit(1);
+  }, 10_000);
+  forceExitTimer.unref?.();
+
+  server.close((err) => {
+    if (err) {
+      logger.error({ err }, '[MYFood Service] Error while closing HTTP server');
+    } else {
+      logger.info('[MYFood Service] HTTP server closed.');
+    }
+
+    closeIfPossible(foodItemRepository);
+    closeIfPossible(userRepository);
+    logger.info('[MYFood Service] Database connections closed. Exiting.');
+
+    clearTimeout(forceExitTimer);
+    process.exit(0);
+  });
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

@@ -88,6 +88,36 @@ describe('NotificationPoller', () => {
       expect(notificationPort.notify).not.toHaveBeenCalled();
     });
 
+    it('isolates per-user failures: one user throwing does not stop other users from being checked', async () => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined as never);
+      const user2: User = {
+        id: 'user-2',
+        email: 'test2@example.com',
+        passwordHash: 'hash',
+        createdAt: new Date(),
+      };
+      (userRepository.listAll as ReturnType<typeof vi.fn>).mockResolvedValue([user, user2]);
+      const user2Alerts = [{ daysUntilExpiry: 2 }] as unknown as ExpiryAlert[];
+      (expiryAlertService.getAlerts as ReturnType<typeof vi.fn>)
+        .mockRejectedValueOnce(new Error('boom for user 1'))
+        .mockResolvedValueOnce(user2Alerts);
+
+      const poller = new NotificationPoller(
+        expiryAlertService,
+        notificationPort,
+        userRepository,
+        1000,
+        5,
+      );
+
+      await poller.poll();
+
+      expect(expiryAlertService.getAlerts).toHaveBeenCalledWith(user.id, 5);
+      expect(expiryAlertService.getAlerts).toHaveBeenCalledWith(user2.id, 5);
+      expect(notificationPort.notify).toHaveBeenCalledWith(user2Alerts);
+      expect(errorSpy).toHaveBeenCalled();
+    });
+
     it('logs and swallows errors from the notification port', async () => {
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined as never);
       (expiryAlertService.getAlerts as ReturnType<typeof vi.fn>).mockResolvedValue([

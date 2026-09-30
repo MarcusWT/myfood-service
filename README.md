@@ -204,6 +204,10 @@ Returns a shopping list summary grouped by category. Includes items that are exp
 | `AUTH_RATE_LIMIT_MAX` | `10` | Max requests per window per IP for `/auth/register` and `/auth/login` |
 | `RECIPE_RATE_LIMIT_MAX` | `20` | Max requests per window per IP for `/recipes/suggestions` (proxies the metered Spoonacular API) |
 | `BODY_LIMIT` | `100kb` | Max JSON request body size |
+| `NOTIFICATION_POLL_INTERVAL_MS` | `3600000` (1h) | How often the background `NotificationPoller` checks for expiring items |
+| `NOTIFICATION_WITHIN_DAYS` | falls back to `EXPIRY_ALERT_DEFAULT_DAYS` | Window used by the notification poller specifically |
+| `CORS_ORIGIN` | `*` | Comma-separated list of allowed CORS origins. Defaults to `*` (any origin) for dev convenience; set explicitly in shared/production environments |
+| `TRUST_PROXY` | `false` | Express `trust proxy` setting. Set to a hop count (e.g. `1`) when behind a reverse proxy/load balancer so the rate limiter sees the real client IP |
 
 Rate limiting is automatically disabled in the `test` environment (`NODE_ENV=test`) so the HTTP integration test suite isn't affected by its own rapid sequential requests.
 
