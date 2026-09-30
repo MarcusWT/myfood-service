@@ -3,6 +3,7 @@ import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../../core/dom
 import { Location } from '../../../core/domain/value-objects.js';
 import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
+import { runMigrations, allMigrations } from './migrations/index.js';
 
 interface FoodItemRow {
   id: string;
@@ -18,22 +19,6 @@ interface FoodItemRow {
   notes: string | null;
   minimum_quantity: number | null;
 }
-
-const CREATE_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS food_items (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    quantity    REAL NOT NULL,
-    unit        TEXT NOT NULL,
-    location    TEXT NOT NULL,
-    category    TEXT NOT NULL,
-    best_before TEXT NOT NULL,
-    added_at    TEXT NOT NULL,
-    updated_at  TEXT NOT NULL,
-    notes       TEXT,
-    minimum_quantity REAL
-  )
-`;
 
 function rowToFoodItem(row: FoodItemRow): FoodItem {
   return {
@@ -82,9 +67,13 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
-    this.db.exec(CREATE_TABLE_SQL);
-    this.migrateAddMinimumQuantityColumn();
-    this.migrateAddUserIdColumn();
+    runMigrations(this.db, allMigrations);
+    // Runs after migrations commit (by design): the schema change that adds
+    // `user_id` needs to already be in place for the remediation SQL in the
+    // error message below to be valid to run, and for the orphaned-row check
+    // itself to make sense. If this throws, the schema has still been
+    // upgraded; only process startup is blocked until a human fixes the data.
+    this.assertNoOrphanedUserIdRows();
   }
 
   /**
@@ -97,20 +86,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     return this.db;
   }
 
-  private migrateAddMinimumQuantityColumn(): void {
-    const columns = this.db.prepare('PRAGMA table_info(food_items)').all() as { name: string }[];
-    if (!columns.some((column) => column.name === 'minimum_quantity')) {
-      this.db.exec('ALTER TABLE food_items ADD COLUMN minimum_quantity REAL');
-    }
-  }
-
-  private migrateAddUserIdColumn(): void {
-    const columns = this.db.prepare('PRAGMA table_info(food_items)').all() as { name: string }[];
-    if (!columns.some((column) => column.name === 'user_id')) {
-      this.db.exec('ALTER TABLE food_items ADD COLUMN user_id TEXT');
-    }
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_food_items_user_id ON food_items(user_id)');
-
+  private assertNoOrphanedUserIdRows(): void {
     const { count } = this.db
       .prepare('SELECT COUNT(*) as count FROM food_items WHERE user_id IS NULL')
       .get() as { count: number };
@@ -121,6 +97,9 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
       // become permanently invisible (not 404, just silently absent from
       // every list/get) with no way to reach them through the API. Failing
       // fast here forces an explicit decision rather than a silent data loss.
+      // This is re-checked on every startup (not just once as part of the
+      // user_id migration), since it's a runtime data invariant rather than
+      // a one-time schema change.
       throw new Error(
         `[Migration] food_items table has ${count} row(s) with no user_id, left over from ` +
           'before authentication was added. These rows would become permanently inaccessible ' +

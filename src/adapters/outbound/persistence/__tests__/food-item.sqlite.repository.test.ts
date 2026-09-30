@@ -227,6 +227,79 @@ describe('SqliteFoodItemRepository', () => {
       }
     });
 
+    it('brings a fully legacy database (pre-migration-system, ad-hoc columns already present, no schema_migrations table) up to the current schema without errors or data loss', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'myfood-service-test-'));
+      const path = join(dir, 'legacy-full.db');
+
+      try {
+        // Simulate a database from before the migration system existed,
+        // where the old ad-hoc guards had already run: both minimum_quantity
+        // and user_id columns (plus the index) are present, but there is no
+        // schema_migrations table recording that, and no users table yet.
+        const legacyDb = new Database(path);
+        legacyDb.exec(`
+          CREATE TABLE food_items (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            quantity    REAL NOT NULL,
+            unit        TEXT NOT NULL,
+            location    TEXT NOT NULL,
+            category    TEXT NOT NULL,
+            best_before TEXT NOT NULL,
+            added_at    TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            notes       TEXT,
+            minimum_quantity REAL,
+            user_id     TEXT
+          )
+        `);
+        legacyDb.exec('CREATE INDEX idx_food_items_user_id ON food_items(user_id)');
+        legacyDb
+          .prepare(
+            `INSERT INTO food_items (id, user_id, name, quantity, unit, location, category, best_before, added_at, updated_at, minimum_quantity)
+             VALUES ('existing-1', 'user-abc', 'Milk', 1, 'UNITS', 'FRIDGE', 'OTHER', '2099-01-01', '2020-01-01', '2020-01-01', 2)`,
+          )
+          .run();
+
+        const tablesBefore = legacyDb
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .all() as { name: string }[];
+        expect(tablesBefore.map((t) => t.name)).not.toContain('schema_migrations');
+        expect(tablesBefore.map((t) => t.name)).not.toContain('users');
+        legacyDb.close();
+
+        // Constructing the repository must not throw, must not attempt to
+        // re-run CREATE TABLE/ALTER TABLE statements that would fail
+        // because the table/columns already exist, and must preserve the
+        // pre-existing row untouched.
+        const migratedRepo = new SqliteFoodItemRepository(path);
+
+        const verifyDb = new Database(path);
+        const tablesAfter = verifyDb
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .all() as { name: string }[];
+        expect(tablesAfter.map((t) => t.name)).toEqual(
+          expect.arrayContaining(['food_items', 'users', 'schema_migrations']),
+        );
+
+        const migrationRows = verifyDb
+          .prepare('SELECT id FROM schema_migrations ORDER BY id ASC')
+          .all() as { id: number }[];
+        expect(migrationRows.map((r) => r.id)).toEqual([1, 2, 3, 4]);
+
+        const existingRow = verifyDb
+          .prepare('SELECT * FROM food_items WHERE id = ?')
+          .get('existing-1') as { name: string; user_id: string; minimum_quantity: number };
+        expect(existingRow.name).toBe('Milk');
+        expect(existingRow.user_id).toBe('user-abc');
+        expect(existingRow.minimum_quantity).toBe(2);
+
+        migratedRepo.close();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it('throws at startup if the legacy database has rows with no user_id', () => {
       const dir = mkdtempSync(join(tmpdir(), 'myfood-service-test-'));
       const path = join(dir, 'legacy-orphaned.db');

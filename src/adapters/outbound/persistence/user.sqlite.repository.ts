@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { User } from '../../../core/domain/user.js';
 import { UserRepositoryPort } from '../../../core/ports/outbound/user-repository.port.js';
+import { runMigrations, allMigrations } from './migrations/index.js';
 
 interface UserRow {
   id: string;
@@ -8,15 +9,6 @@ interface UserRow {
   password_hash: string;
   created_at: string;
 }
-
-const CREATE_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS users (
-    id            TEXT PRIMARY KEY,
-    email         TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    created_at    TEXT NOT NULL
-  )
-`;
 
 function rowToUser(row: UserRow): User {
   return {
@@ -33,7 +25,7 @@ export class SqliteUserRepository implements UserRepositoryPort {
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
-    this.db.exec(CREATE_TABLE_SQL);
+    runMigrations(this.db, allMigrations);
   }
 
   async findByEmail(email: string): Promise<User | null> {
