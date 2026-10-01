@@ -386,4 +386,99 @@ describe('FoodItemController (HTTP)', () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe('POST /api/v1/food-items/:id/dispose', () => {
+    const create = async () =>
+      (
+        await request(app)
+          .post('/api/v1/food-items')
+          .set('Authorization', authHeader)
+          .send(makeCreateFoodItemInput())
+      ).body;
+
+    it('marks the item consumed and hides it from active views', async () => {
+      const item = await create();
+      const res = await request(app)
+        .post(`/api/v1/food-items/${item.id}/dispose`)
+        .set('Authorization', authHeader)
+        .send({ outcome: 'CONSUMED' });
+      expect(res.status).toBe(200);
+      expect(res.body.disposition).toBe('CONSUMED');
+      expect(res.body.disposedAt).toBeDefined();
+
+      const list = await request(app).get('/api/v1/food-items').set('Authorization', authHeader);
+      expect(list.body.total).toBe(0);
+      const get = await request(app)
+        .get(`/api/v1/food-items/${item.id}`)
+        .set('Authorization', authHeader);
+      expect(get.status).toBe(404);
+      const summary = await request(app).get('/api/v1/shopping/summary').set('Authorization', authHeader);
+      expect(JSON.stringify(summary.body)).not.toContain(item.id);
+      const alerts = await request(app)
+        .get('/api/v1/alerts/expiry?withinDays=365')
+        .set('Authorization', authHeader);
+      expect(alerts.body).toHaveLength(0);
+    });
+
+    it('allows re-adding an item with the same name after disposal', async () => {
+      const item = await create();
+      await request(app)
+        .post(`/api/v1/food-items/${item.id}/dispose`)
+        .set('Authorization', authHeader)
+        .send({ outcome: 'DISCARDED' });
+      const again = await request(app)
+        .post('/api/v1/food-items')
+        .set('Authorization', authHeader)
+        .send(makeCreateFoodItemInput());
+      expect(again.status).toBe(201);
+    });
+
+    it('returns 400 for an invalid outcome', async () => {
+      const item = await create();
+      const res = await request(app)
+        .post(`/api/v1/food-items/${item.id}/dispose`)
+        .set('Authorization', authHeader)
+        .send({ outcome: 'EATEN' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 when already disposed, and for other users', async () => {
+      const item = await create();
+      const other = await registerTestUser(app);
+      const asOther = await request(app)
+        .post(`/api/v1/food-items/${item.id}/dispose`)
+        .set('Authorization', other.authHeader)
+        .send({ outcome: 'CONSUMED' });
+      expect(asOther.status).toBe(404);
+
+      await request(app)
+        .post(`/api/v1/food-items/${item.id}/dispose`)
+        .set('Authorization', authHeader)
+        .send({ outcome: 'CONSUMED' });
+      const twice = await request(app)
+        .post(`/api/v1/food-items/${item.id}/dispose`)
+        .set('Authorization', authHeader)
+        .send({ outcome: 'DISCARDED' });
+      expect(twice.status).toBe(404);
+    });
+
+    it('returns 401 without a token', async () => {
+      const res = await request(app)
+        .post('/api/v1/food-items/00000000-0000-0000-0000-000000000001/dispose')
+        .send({ outcome: 'CONSUMED' });
+      expect(res.status).toBe(401);
+    });
+
+    it('still allows hard delete of a disposed item', async () => {
+      const item = await create();
+      await request(app)
+        .post(`/api/v1/food-items/${item.id}/dispose`)
+        .set('Authorization', authHeader)
+        .send({ outcome: 'CONSUMED' });
+      const del = await request(app)
+        .delete(`/api/v1/food-items/${item.id}`)
+        .set('Authorization', authHeader);
+      expect(del.status).toBe(204);
+    });
+  });
 });

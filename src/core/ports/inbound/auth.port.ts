@@ -9,4 +9,5 @@ export interface AuthServicePort {
   register(input: RegisterInput): Promise<AuthResult>;
   login(input: LoginInput): Promise<AuthResult>;
   verifyToken(token: string): Promise<string>;
+  getCurrentUser(userId: string): Promise<PublicUser>;
 }

@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { RegisterInput, LoginInput, User, toPublicUser } from '../core/domain/user.js';
+import { RegisterInput, LoginInput, User, PublicUser, toPublicUser } from '../core/domain/user.js';
 import { AuthServicePort, AuthResult } from '../core/ports/inbound/auth.port.js';
 import { UserRepositoryPort } from '../core/ports/outbound/user-repository.port.js';
 import { ConflictError } from './food-item.service.js';
@@ -77,6 +77,14 @@ export class AuthService implements AuthServicePort {
     } catch {
       throw new UnauthorizedError('Invalid or expired token');
     }
+  }
+
+  async getCurrentUser(userId: string): Promise<PublicUser> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new UnauthorizedError('User no longer exists');
+    }
+    return toPublicUser(user);
   }
 
   private signToken(userId: string): string {

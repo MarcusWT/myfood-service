@@ -123,6 +123,10 @@ use `supertest` against the real Express app (`createApp`, wired via
 database file is touched, and no real network calls are made (the `RecipeProviderPort` is faked in
 tests since Spoonacular is an external dependency).
 
+### Web UI
+
+The frontend lives in `web/` (own `package.json`). With the backend on :3000, run `cd web && npm install && npm run dev` and open http://localhost:5173. Tests: `npm test`; end-to-end: `npm run e2e`. See `web/README.md`.
+
 ## 6. Type checking and linting
 
 ```bash

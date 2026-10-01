@@ -24,12 +24,14 @@ export function createRouter(
   // Auth (public)
   router.post('/auth/register', authRateLimiter, authController.register);
   router.post('/auth/login', authRateLimiter, authController.login);
+  router.get('/auth/me', requireAuth, authController.me);
 
   // Food Items
   router.post('/food-items', requireAuth, foodItemController.addItem);
   router.get('/food-items', requireAuth, foodItemController.listItems);
   router.get('/food-items/:id', requireAuth, foodItemController.getItem);
   router.patch('/food-items/:id', requireAuth, foodItemController.updateItem);
+  router.post('/food-items/:id/dispose', requireAuth, foodItemController.disposeItem);
   router.delete('/food-items/:id', requireAuth, foodItemController.removeItem);
 
   // Expiry Alerts

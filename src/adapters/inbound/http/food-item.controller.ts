@@ -4,6 +4,7 @@ import {
   CreateFoodItemSchema,
   UpdateFoodItemSchema,
   FoodItemFilterSchema,
+  DisposeFoodItemSchema,
 } from '../../../core/domain/food-item.js';
 import { PaginationSchema } from '../../../core/domain/pagination.js';
 
@@ -44,6 +45,16 @@ export class FoodItemController {
     try {
       const input = UpdateFoodItemSchema.parse(req.body);
       const item = await this.service.updateItem(req.params.id, req.userId!, input);
+      res.json(item);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  disposeItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { outcome } = DisposeFoodItemSchema.parse(req.body);
+      const item = await this.service.disposeItem(req.params.id, req.userId!, outcome);
       res.json(item);
     } catch (err) {
       next(err);

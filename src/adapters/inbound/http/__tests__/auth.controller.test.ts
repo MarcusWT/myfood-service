@@ -180,4 +180,23 @@ describe('AuthController (HTTP)', () => {
       expect(getAsA.body.quantity).not.toBe(99);
     });
   });
+
+  describe('GET /api/v1/auth/me', () => {
+    it('returns the current user for a valid token', async () => {
+      const user = await registerTestUser(app);
+      const res = await request(app).get('/api/v1/auth/me').set('Authorization', user.authHeader);
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['email', 'id']);
+    });
+
+    it('returns 401 without a token', async () => {
+      const res = await request(app).get('/api/v1/auth/me');
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 for an invalid token', async () => {
+      const res = await request(app).get('/api/v1/auth/me').set('Authorization', 'Bearer nope');
+      expect(res.status).toBe(401);
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../../core/domain/food-item.js';
+import { FoodItem, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../../../core/domain/food-item.js';
 import { Location } from '../../../core/domain/value-objects.js';
 import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
@@ -18,6 +18,8 @@ interface FoodItemRow {
   updated_at: string;
   notes: string | null;
   minimum_quantity: number | null;
+  disposition: string | null;
+  disposed_at: string | null;
 }
 
 function rowToFoodItem(row: FoodItemRow): FoodItem {
@@ -34,6 +36,8 @@ function rowToFoodItem(row: FoodItemRow): FoodItem {
     updatedAt: new Date(row.updated_at),
     notes: row.notes ?? undefined,
     minimumQuantity: row.minimum_quantity ?? undefined,
+    disposition: (row.disposition as DisposalOutcome | null) ?? undefined,
+    disposedAt: row.disposed_at ? new Date(row.disposed_at) : undefined,
   };
 }
 
@@ -41,7 +45,7 @@ function buildWhereClause(
   userId: string,
   filter?: FoodItemFilter,
 ): { where: string; params: Record<string, string> } {
-  const conditions: string[] = ['user_id = @userId'];
+  const conditions: string[] = ['user_id = @userId', 'disposition IS NULL'];
   const params: Record<string, string> = { userId };
 
   if (filter?.location) {
@@ -134,7 +138,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
 
   async findById(id: string, userId: string): Promise<FoodItem | null> {
     const row = this.db
-      .prepare('SELECT * FROM food_items WHERE id = ? AND user_id = ?')
+      .prepare('SELECT * FROM food_items WHERE id = ? AND user_id = ? AND disposition IS NULL')
       .get(id, userId) as FoodItemRow | undefined;
     return row ? rowToFoodItem(row) : null;
   }
@@ -177,7 +181,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     const row = this.db
       .prepare(
         `SELECT * FROM food_items
-         WHERE lower(name) = lower(@name) AND location = @location AND user_id = @userId AND id != @excludeId`,
+         WHERE lower(name) = lower(@name) AND location = @location AND user_id = @userId AND disposition IS NULL AND id != @excludeId`,
       )
       .get({ name, location, userId, excludeId: excludeId ?? '' }) as FoodItemRow | undefined;
     return row ? rowToFoodItem(row) : null;
@@ -216,6 +220,21 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
       });
 
     return updated;
+  }
+
+  async dispose(id: string, userId: string, outcome: DisposalOutcome): Promise<FoodItem | null> {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE food_items SET disposition = @outcome, disposed_at = @now, updated_at = @now
+         WHERE id = @id AND user_id = @userId AND disposition IS NULL`,
+      )
+      .run({ outcome, now, id, userId });
+    if (result.changes === 0) return null;
+    const row = this.db
+      .prepare('SELECT * FROM food_items WHERE id = ? AND user_id = ?')
+      .get(id, userId) as FoodItemRow;
+    return rowToFoodItem(row);
   }
 
   async delete(id: string, userId: string): Promise<boolean> {

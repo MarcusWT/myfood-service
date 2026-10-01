@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    include: ['src/**/*.test.ts'], // web/ has its own vitest config
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

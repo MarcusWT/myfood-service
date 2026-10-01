@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter } from '../core/domain/food-item.js';
+import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../core/domain/food-item.js';
 import { PaginatedResult, PaginationInput } from '../core/domain/pagination.js';
 import { FoodItemServicePort } from '../core/ports/inbound/food-item.service.port.js';
 import { FoodItemRepositoryPort } from '../core/ports/outbound/food-item.repository.port.js';
@@ -91,6 +91,14 @@ export class FoodItemService implements FoodItemServicePort {
       throw new NotFoundError(`Food item with id '${id}' not found`);
     }
     return updated;
+  }
+
+  async disposeItem(id: string, userId: string, outcome: DisposalOutcome): Promise<FoodItem> {
+    const disposed = await this.repository.dispose(id, userId, outcome);
+    if (!disposed) {
+      throw new NotFoundError(`Food item with id '${id}' not found`);
+    }
+    return disposed;
   }
 
   async removeItem(id: string, userId: string): Promise<void> {

@@ -1,4 +1,4 @@
-import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter } from '../../domain/food-item.js';
+import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../../domain/food-item.js';
 import { PaginatedResult, PaginationInput } from '../../domain/pagination.js';
 
 export interface FoodItemServicePort {
@@ -11,5 +11,6 @@ export interface FoodItemServicePort {
     pagination: PaginationInput,
   ): Promise<PaginatedResult<FoodItem>>;
   updateItem(id: string, userId: string, input: UpdateFoodItemInput): Promise<FoodItem>;
+  disposeItem(id: string, userId: string, outcome: DisposalOutcome): Promise<FoodItem>;
   removeItem(id: string, userId: string): Promise<void>;
 }

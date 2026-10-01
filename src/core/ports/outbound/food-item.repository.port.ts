@@ -1,4 +1,4 @@
-import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../domain/food-item.js';
+import { FoodItem, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../../domain/food-item.js';
 import { Location } from '../../domain/value-objects.js';
 import { PaginatedResult, PaginationInput } from '../../domain/pagination.js';
 
@@ -24,5 +24,12 @@ export interface FoodItemRepositoryPort {
     excludeId?: string,
   ): Promise<FoodItem | null>;
   update(id: string, userId: string, input: UpdateFoodItemInput): Promise<FoodItem | null>;
+  /**
+   * Marks an active item as disposed (consumed/discarded) rather than
+   * deleting it. Returns null if the item doesn't exist, belongs to another
+   * user, or is already disposed. Disposed items are excluded from every
+   * other read method except via hard `delete`.
+   */
+  dispose(id: string, userId: string, outcome: DisposalOutcome): Promise<FoodItem | null>;
   delete(id: string, userId: string): Promise<boolean>;
 }

@@ -285,7 +285,7 @@ describe('SqliteFoodItemRepository', () => {
         const migrationRows = verifyDb
           .prepare('SELECT id FROM schema_migrations ORDER BY id ASC')
           .all() as { id: number }[];
-        expect(migrationRows.map((r) => r.id)).toEqual([1, 2, 3, 4]);
+        expect(migrationRows.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
 
         const existingRow = verifyDb
           .prepare('SELECT * FROM food_items WHERE id = ?')
@@ -333,6 +333,27 @@ describe('SqliteFoodItemRepository', () => {
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe('dispose', () => {
+    it('marks an item disposed, excludes it from reads, and is not repeatable', async () => {
+      await repo.save(makeItem());
+      const disposed = await repo.dispose(makeItem().id, USER_ID, 'CONSUMED');
+      expect(disposed?.disposition).toBe('CONSUMED');
+      expect(disposed?.disposedAt).toBeInstanceOf(Date);
+
+      expect(await repo.findById(makeItem().id, USER_ID)).toBeNull();
+      expect(await repo.findAll(USER_ID)).toHaveLength(0);
+      expect((await repo.findAllPaginated(USER_ID, {}, { page: 1, limit: 10 })).total).toBe(0);
+      expect(await repo.findByNameAndLocation(USER_ID, 'Eggs', 'FRIDGE')).toBeNull();
+      expect(await repo.dispose(makeItem().id, USER_ID, 'DISCARDED')).toBeNull();
+      expect(await repo.delete(makeItem().id, USER_ID)).toBe(true);
+    });
+
+    it('does not dispose another user\'s item', async () => {
+      await repo.save(makeItem());
+      expect(await repo.dispose(makeItem().id, 'someone-else', 'CONSUMED')).toBeNull();
     });
   });
 });

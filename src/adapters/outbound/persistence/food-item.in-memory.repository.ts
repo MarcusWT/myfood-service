@@ -1,4 +1,4 @@
-import { FoodItem, UpdateFoodItemInput, FoodItemFilter } from '../../../core/domain/food-item.js';
+import { FoodItem, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../../../core/domain/food-item.js';
 import { Location } from '../../../core/domain/value-objects.js';
 import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
@@ -38,11 +38,11 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
 
   async findById(id: string, userId: string): Promise<FoodItem | null> {
     const item = this.items.get(id);
-    return item && item.userId === userId ? clone(item) : null;
+    return item && item.userId === userId && !item.disposition ? clone(item) : null;
   }
 
   async findAll(userId: string, filter?: FoodItemFilter): Promise<FoodItem[]> {
-    const owned = Array.from(this.items.values()).filter((item) => item.userId === userId);
+    const owned = Array.from(this.items.values()).filter((item) => item.userId === userId && !item.disposition);
     const results = applyFilter(owned, filter);
     results.sort((a, b) => a.bestBefore.getTime() - b.bestBefore.getTime());
     return results.map(clone);
@@ -53,7 +53,7 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
     filter: FoodItemFilter,
     pagination: PaginationInput,
   ): Promise<PaginatedResult<FoodItem>> {
-    const owned = Array.from(this.items.values()).filter((item) => item.userId === userId);
+    const owned = Array.from(this.items.values()).filter((item) => item.userId === userId && !item.disposition);
     const results = applyFilter(owned, filter);
     results.sort((a, b) => a.bestBefore.getTime() - b.bestBefore.getTime());
 
@@ -75,6 +75,7 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
     const match = Array.from(this.items.values()).find(
       (item) =>
         item.userId === userId &&
+        !item.disposition &&
         item.name.toLowerCase() === needle &&
         item.location === location &&
         item.id !== excludeId,
@@ -84,7 +85,7 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
 
   async update(id: string, userId: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {
     const existing = this.items.get(id);
-    if (!existing || existing.userId !== userId) return null;
+    if (!existing || existing.userId !== userId || existing.disposition) return null;
 
     const updated: FoodItem = {
       ...existing,
@@ -94,6 +95,15 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
 
     this.items.set(id, updated);
     return clone(updated);
+  }
+
+  async dispose(id: string, userId: string, outcome: DisposalOutcome): Promise<FoodItem | null> {
+    const existing = this.items.get(id);
+    if (!existing || existing.userId !== userId || existing.disposition) return null;
+    const now = new Date();
+    const disposed: FoodItem = { ...existing, disposition: outcome, disposedAt: now, updatedAt: now };
+    this.items.set(id, disposed);
+    return clone(disposed);
   }
 
   async delete(id: string, userId: string): Promise<boolean> {

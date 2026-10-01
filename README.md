@@ -105,6 +105,13 @@ The image sets a default `DB_PATH=/app/data/myfood.db`, so this works even if
 `DB_PATH` is omitted from `.env` (unlike running the app outside Docker, where
 the default resolves elsewhere and `DB_PATH` should be set explicitly).
 
+### Web UI
+
+`docker compose up --build` also starts a `web` service (nginx serving the SPA
+from `web/`, proxying `/api/` to the API) on `WEB_PORT` (default `8080`). The API
+container gets `TRUST_PROXY=1`. The nginx proxy targets `myfood-service:3000`, so
+keep the API's container `PORT` at 3000. See `web/README.md` for frontend commands.
+
 ### Without docker-compose
 
 ```bash

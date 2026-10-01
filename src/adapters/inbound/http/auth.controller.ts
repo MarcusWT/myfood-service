@@ -24,4 +24,13 @@ export class AuthController {
       next(err);
     }
   };
+
+  me = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = await this.service.getCurrentUser(req.userId as string);
+      res.json(user);
+    } catch (err) {
+      next(err);
+    }
+  };
 }

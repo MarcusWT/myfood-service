@@ -4,6 +4,7 @@ import {
   FoodItemSchema,
   CreateFoodItemSchema,
   UpdateFoodItemSchema,
+  DisposeFoodItemSchema,
 } from '../../../../core/domain/food-item.js';
 import { RegisterInputSchema, LoginInputSchema } from '../../../../core/domain/user.js';
 import { AlertQuerySchema } from '../expiry-alert.controller.js';
@@ -287,6 +288,22 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'get',
+  path: '/auth/me',
+  tags: ['Auth'],
+  summary: 'Get the currently authenticated user',
+  security: authSecurity,
+  responses: {
+    200: {
+      description: 'Current user',
+      content: { 'application/json': { schema: PublicUserComponent } },
+    },
+    401: unauthorized,
+    500: internalError,
+  },
+});
+
+registry.registerPath({
   method: 'post',
   path: '/food-items',
   tags: ['Food Items'],
@@ -379,10 +396,32 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'post',
+  path: '/food-items/{id}/dispose',
+  tags: ['Food Items'],
+  summary: 'Mark a food item as consumed or discarded (keeps the record, removes it from active lists)',
+  security: authSecurity,
+  request: {
+    params: IdParam,
+    body: { content: { 'application/json': { schema: DisposeFoodItemSchema } } },
+  },
+  responses: {
+    200: {
+      description: 'Food item disposed',
+      content: { 'application/json': { schema: FoodItemComponent } },
+    },
+    400: badRequest,
+    401: unauthorized,
+    404: notFound,
+    500: internalError,
+  },
+});
+
+registry.registerPath({
   method: 'delete',
   path: '/food-items/{id}',
   tags: ['Food Items'],
-  summary: 'Delete a food item',
+  summary: 'Permanently delete a food item (hard delete, active or disposed)',
   security: authSecurity,
   request: { params: IdParam },
   responses: {

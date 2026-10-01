@@ -2,7 +2,7 @@
 
 Priority-ordered backlog of improvements and missing pieces following the initial implementation.
 
-Items 1–10 are complete. Items 11–12 were already identified but are expanded below with concrete
+All items (1–18) are complete. Items 11–12 were already identified but are expanded below with concrete
 implementation notes; items 13–17 are new additions surfaced by reviewing the current state of the
 codebase (see individual "Why" sections for the specific gaps observed).
 
@@ -212,7 +212,7 @@ codebase (see individual "Why" sections for the specific gaps observed).
 
 ---
 
-## 18. Post-Completion Audit (items 1–17 all done) — Fixes applied, further items backlogged
+## 18. Post-Completion Audit (items 1–17 all done) — ✅ Done (remaining backlog moved to `frontend-implementation.md`)
 
 **Why:** With the original 17-item backlog fully complete, three independent audits (security/architecture, product/feature-completeness, ops/reliability/DX) were run against the whole codebase to find what a senior engineer would flag before calling this production-ready. The following concrete bugs/gaps were found and fixed immediately; larger product features are logged below as new backlog items for future prioritization.
 
@@ -228,15 +228,6 @@ codebase (see individual "Why" sections for the specific gaps observed).
 - [x] **`NotificationPoller` had no per-user failure isolation** — one user's `getAlerts` throwing aborted the whole poll tick, silently skipping every other user that cycle. Now wrapped per-user in its own try/catch (logged, not fatal), with a test proving a second user still gets notified when the first user's lookup fails.
 - [x] Polish from a second review pass on this batch: added a re-entrancy guard to `shutdown()` (duplicate SIGTERM/SIGINT no longer runs the shutdown sequence twice) and a warning log for unparseable `TRUST_PROXY` values (previously silently fell back to `false` with no indication).
 
-### New backlog items surfaced (not yet implemented — sequenced by the three audits' priority calls)
+### Remaining backlog
 
-- **[High, product]** "Consumed" vs. "deleted" distinction + basic usage history. `DELETE /food-items/:id` is a hard delete — there's no way to ever distinguish "ate it" from "threw it out," which is the core signal a food-waste-reduction product needs. Needs a `status: ACTIVE|CONSUMED|DISCARDED` field (or `consumedAt`) instead of physical deletion, plus a history/stats endpoint. Bigger lift than it looks — touches the repository port, both SQLite/in-memory adapters, and likely a new migration.
-- **[High, product]** Bulk add (`POST /food-items/bulk`) — every item currently requires an individual round-trip; the realistic "just got back from the grocery store with 15 items" workflow is currently painful. Needs per-item partial-failure semantics in the response, not all-or-nothing.
-- **[High, product]** Real notification delivery — `NotificationPort`/`NotificationPoller` (item 9) are correctly abstracted but the only adapter logs to the server's own stdout, which no end user ever sees. The flagship "proactive expiry alerts" feature currently notifies nobody. Needs an email adapter at minimum (the `users` table already has `email`).
-- **[Medium, product]** Household/multi-user sharing — the data model is strictly single-user (`user_id` per item), but the realistic use case (a family sharing one fridge) isn't supported without literally sharing login credentials. Touches nearly every repository method signature; sequence after the three items above.
-- **[Medium, product]** Account self-service — no `GET/PATCH/DELETE /auth/me` (view profile, change password, delete account). Blocked in part by the already-documented token-non-revocability limitation from item 11; needs that solved alongside it, not skipped.
-- **[Medium, product]** Barcode/UPC lookup on item creation (e.g. via Open Food Facts, mirroring the existing `RecipeProviderPort` outbound-adapter pattern) to reduce manual-entry friction, complementing the bulk-add item above.
-- **[Medium, ops]** Request/correlation-ID support (assign `req.id`, thread through morgan format string + a per-request pino child logger) so a single request can be traced across the two separate logging layers (morgan access logs + pino app logs) during an incident.
-- **[Low, ops]** `/metrics` (Prometheus-style) endpoint — reasonable to defer until the service is actually operating at a scale where latency/error-rate dashboards are load-bearing; not urgent at current scale.
-- **[Low, architecture]** Single SQLite file has no multi-instance story — the migration-runner's `exclusive()` lock (item 17) correctly prevents concurrent-startup corruption, but there's no path to horizontal scaling (read replicas, multiple app instances against one file) if that's ever needed. Worth an explicit architecture-decision-record (stay single-instance by design vs. plan a Postgres migration) rather than leaving it an implicit, undecided constraint.
-- **[Low, dependency hygiene]** `express` 4→5, `zod` 3→4, `better-sqlite3` 11→13, `vitest` 2→5 are all available major upgrades (from `npm outdated`). None urgent given the green baseline, but `express`/`zod` especially are non-trivial breaking migrations worth planning deliberately rather than drifting further behind.
+The not-yet-implemented items surfaced by the audits have moved to [`frontend-implementation.md`](./frontend-implementation.md), alongside the frontend implementation plan.

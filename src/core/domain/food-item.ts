@@ -3,6 +3,12 @@ import { LocationSchema, CategorySchema, UnitSchema } from './value-objects.js';
 
 const MAX_QUANTITY = 100_000;
 
+export const DisposalOutcomeSchema = z.enum(['CONSUMED', 'DISCARDED']);
+export type DisposalOutcome = z.infer<typeof DisposalOutcomeSchema>;
+
+export const DisposeFoodItemSchema = z.object({ outcome: DisposalOutcomeSchema });
+export type DisposeFoodItemInput = z.infer<typeof DisposeFoodItemSchema>;
+
 export const FoodItemSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
@@ -16,6 +22,8 @@ export const FoodItemSchema = z.object({
   updatedAt: z.coerce.date(),
   notes: z.string().trim().max(500).optional(),
   minimumQuantity: z.number().nonnegative().max(MAX_QUANTITY).optional(),
+  disposition: DisposalOutcomeSchema.optional(),
+  disposedAt: z.coerce.date().optional(),
 });
 
 export type FoodItem = z.infer<typeof FoodItemSchema>;
@@ -25,6 +33,8 @@ export const CreateFoodItemSchema = FoodItemSchema.omit({
   userId: true,
   addedAt: true,
   updatedAt: true,
+  disposition: true,
+  disposedAt: true,
 }).refine((data) => data.bestBefore.getTime() > Date.now(), {
   message: 'bestBefore must be a future date',
   path: ['bestBefore'],
@@ -36,6 +46,8 @@ export const UpdateFoodItemSchema = FoodItemSchema.omit({
   userId: true,
   addedAt: true,
   updatedAt: true,
+  disposition: true,
+  disposedAt: true,
 })
   .partial()
   .refine((data) => data.bestBefore === undefined || data.bestBefore.getTime() > Date.now(), {

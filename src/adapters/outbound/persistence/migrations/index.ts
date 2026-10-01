@@ -3,6 +3,7 @@ import { createFoodItemsMigration } from './001-create-food-items.js';
 import { addMinimumQuantityMigration } from './002-add-minimum-quantity.js';
 import { addUserIdToFoodItemsMigration } from './003-add-user-id-to-food-items.js';
 import { createUsersMigration } from './004-create-users.js';
+import { addDispositionMigration } from './005-add-disposition.js';
 
 export type { Migration };
 export { runMigrations } from './migration-runner.js';
@@ -22,4 +23,5 @@ export const allMigrations: Migration[] = [
   addMinimumQuantityMigration,
   addUserIdToFoodItemsMigration,
   createUsersMigration,
+  addDispositionMigration,
 ];
