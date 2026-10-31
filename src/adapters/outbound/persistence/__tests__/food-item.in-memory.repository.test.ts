@@ -215,6 +215,35 @@ describe('InMemoryFoodItemRepository', () => {
     });
   });
 
+  describe('update semantics (null clears, undefined keeps)', () => {
+    it('clears notes and minimumQuantity with null', async () => {
+      const item = makeItem({ notes: 'n', minimumQuantity: 3 });
+      await repo.save(item);
+      const updated = await repo.update(item.id, USER_ID, { notes: null, minimumQuantity: null });
+      expect(updated?.notes).toBeUndefined();
+      expect(updated?.minimumQuantity).toBeUndefined();
+      const found = await repo.findById(item.id, USER_ID);
+      expect(found?.notes).toBeUndefined();
+      expect(found?.minimumQuantity).toBeUndefined();
+    });
+
+    it('leaves omitted fields unchanged and does not clobber on partial update', async () => {
+      const item = makeItem({ notes: 'n', minimumQuantity: 3 });
+      await repo.save(item);
+      const updated = await repo.update(item.id, USER_ID, { quantity: 7, notes: undefined });
+      expect(updated).toMatchObject({ quantity: 7, notes: 'n', minimumQuantity: 3, name: item.name, unit: item.unit });
+      expect(updated!.updatedAt.getTime()).toBeGreaterThan(item.updatedAt.getTime());
+    });
+
+    it('returns null for another user or a disposed item', async () => {
+      const item = makeItem();
+      await repo.save(item);
+      expect(await repo.update(item.id, 'someone-else', { quantity: 2 })).toBeNull();
+      await repo.dispose(item.id, USER_ID, 'CONSUMED');
+      expect(await repo.update(item.id, USER_ID, { quantity: 2 })).toBeNull();
+    });
+  });
+
   describe('delete', () => {
     it('removes an existing item and returns true', async () => {
       const item = makeItem();

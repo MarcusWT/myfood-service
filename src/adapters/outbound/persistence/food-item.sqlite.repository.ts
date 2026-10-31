@@ -114,8 +114,10 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
       throw new Error(
         `[Migration] food_items table has ${count} row(s) with no user_id, left over from ` +
           'before authentication was added. These rows would become permanently inaccessible ' +
-          'through the API. Assign them to a user manually (e.g. ' +
-          "`UPDATE food_items SET user_id = '<uuid>' WHERE user_id IS NULL`) before starting the server.",
+          'through the API. Assign them to an existing user with ' +
+          '`npm run assign-orphans -- --email you@example.com` (or ' +
+          '`node dist/cli/assign-orphaned-items.js --email you@example.com` in prod/Docker; add --dry-run to preview), ' +
+          "or manually with `UPDATE food_items SET user_id = '<uuid>' WHERE user_id IS NULL`, before starting the server.",
       );
     }
   }
@@ -200,43 +202,49 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
   }
 
   async update(id: string, userId: string, input: UpdateFoodItemInput): Promise<FoodItem | null> {
-    const existing = await this.findById(id, userId);
-    if (!existing) return null;
-
-    const updated: FoodItem = {
-      ...existing,
-      ...input,
-      updatedAt: new Date(),
-    };
-
+    let row: FoodItemRow | undefined;
     try {
-    this.db
-      .prepare(
-        `UPDATE food_items
-         SET name = @name, quantity = @quantity, unit = @unit, location = @location,
-             category = @category, best_before = @best_before, updated_at = @updated_at, notes = @notes,
-             minimum_quantity = @minimum_quantity
-         WHERE id = @id AND user_id = @user_id`,
-      )
-      .run({
-        id: updated.id,
-        user_id: updated.userId,
-        name: updated.name,
-        quantity: updated.quantity,
-        unit: updated.unit,
-        location: updated.location,
-        category: updated.category,
-        best_before: updated.bestBefore.toISOString(),
-        updated_at: updated.updatedAt.toISOString(),
-        notes: updated.notes ?? null,
-        minimum_quantity: updated.minimumQuantity ?? null,
-      });
+      row = this.db
+        .prepare(
+          `UPDATE food_items
+           SET name = COALESCE(@name, name),
+               quantity = COALESCE(@quantity, quantity),
+               unit = COALESCE(@unit, unit),
+               location = COALESCE(@location, location),
+               category = COALESCE(@category, category),
+               best_before = COALESCE(@best_before, best_before),
+               notes = CASE WHEN @set_notes = 1 THEN @notes ELSE notes END,
+               minimum_quantity = CASE WHEN @set_min = 1 THEN @minimum_quantity ELSE minimum_quantity END,
+               updated_at = @updated_at
+           WHERE id = @id AND user_id = @user_id AND disposition IS NULL
+           RETURNING *`,
+        )
+        .get({
+          id,
+          user_id: userId,
+          name: input.name ?? null,
+          quantity: input.quantity ?? null,
+          unit: input.unit ?? null,
+          location: input.location ?? null,
+          category: input.category ?? null,
+          best_before: input.bestBefore ? input.bestBefore.toISOString() : null,
+          set_notes: input.notes !== undefined ? 1 : 0,
+          notes: input.notes ?? null,
+          set_min: input.minimumQuantity !== undefined ? 1 : 0,
+          minimum_quantity: input.minimumQuantity ?? null,
+          updated_at: new Date().toISOString(),
+        }) as FoodItemRow | undefined;
     } catch (err) {
-      if (isUniqueViolation(err)) throw new ConflictError(duplicateMessage(updated.name, updated.location));
+      if (isUniqueViolation(err)) {
+        throw new ConflictError(
+          input.name !== undefined && input.location !== undefined
+            ? duplicateMessage(input.name, input.location)
+            : 'An item with that name already exists in that location',
+        );
+      }
       throw err;
     }
-
-    return updated;
+    return row ? rowToFoodItem(row) : null;
   }
 
   async dispose(id: string, userId: string, outcome: DisposalOutcome): Promise<FoodItem | null> {

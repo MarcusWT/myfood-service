@@ -1,4 +1,4 @@
-import { FoodItem, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../../../core/domain/food-item.js';
+import { FoodItem, UpdateFoodItemInput, applyUpdate, FoodItemFilter, DisposalOutcome } from '../../../core/domain/food-item.js';
 import { Location } from '../../../core/domain/value-objects.js';
 import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
@@ -87,11 +87,7 @@ export class InMemoryFoodItemRepository implements FoodItemRepositoryPort {
     const existing = this.items.get(id);
     if (!existing || existing.userId !== userId || existing.disposition) return null;
 
-    const updated: FoodItem = {
-      ...existing,
-      ...input,
-      updatedAt: new Date(),
-    };
+    const updated = applyUpdate(existing, input, new Date());
 
     this.items.set(id, updated);
     return clone(updated);

@@ -20,7 +20,10 @@ export interface CreateInput {
   notes?: string;
   minimumQuantity?: number;
 }
-export type UpdateInput = Partial<CreateInput>;
+export type UpdateInput = Partial<Omit<CreateInput, 'notes' | 'minimumQuantity'>> & {
+  notes?: string | null;
+  minimumQuantity?: number | null;
+};
 
 export function useFoodItems(p: ListParams) {
   return useQuery({

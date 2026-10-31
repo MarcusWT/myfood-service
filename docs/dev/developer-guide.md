@@ -30,6 +30,11 @@ via `dotenv/config`, imported at the top of `src/config.ts` — no extra setup n
 | `PORT` | `3000` | HTTP port (integer 0–65535) the server listens on |
 | `DB_PATH` | `./data/myfood.db` (relative to the process working directory) | Path to the SQLite file. Set to `:memory:` to use the in-memory repository instead (data is lost on restart) |
 | `SPOONACULAR_API_KEY` | *(none)* | Required for `/recipes/suggestions`. Missing it only logs a warning at startup — the server still starts, but recipe requests fail at request time. Get a free key at [spoonacular.com/food-api](https://spoonacular.com/food-api) |
+| `SPOONACULAR_TIMEOUT_MS` | `8000` | Timeout for the Spoonacular search call (the API key is sent via the `x-api-key` header, never in the URL) |
+| `SPOONACULAR_ENRICHMENT_TIMEOUT_MS` | `5000` | Timeout for each per-recipe enrichment call |
+| `RECIPE_CACHE_TTL_MS` | `600000` | TTL of cached recipe search results |
+| `RECIPE_CACHE_MAX_ENTRIES` | `500` | Max cached recipe searches (integer ≥ 1) |
+| `RECIPE_MAX_INGREDIENTS` | `10` | Max ingredients (soonest-expiring first) sent per suggestion search (1–50) |
 | `EXPIRY_ALERT_DEFAULT_DAYS` | `7` | Default "expiring within N days" window used by `/alerts/expiry` and the shopping summary when no query override is given (integer 0–3650) |
 | `NOTIFICATION_POLL_INTERVAL_MS` | `3600000` (1h) | How often the background `NotificationPoller` checks for expiring items (ms, integer 1000–2147483647) |
 | `NOTIFICATION_WITHIN_DAYS` | falls back to `EXPIRY_ALERT_DEFAULT_DAYS` | Window used by the notification poller specifically (integer 0–3650) |
@@ -70,6 +75,10 @@ DB_PATH=:memory: npm run dev
 ```
 
 Every restart starts from an empty inventory.
+
+### Legacy rows with no `user_id`
+
+If startup fails with `food_items table has N row(s) with no user_id`, run `npm run assign-orphans -- --email <registered user> [--dry-run]` (`src/cli/assign-orphaned-items.ts`; helper in `adapters/outbound/persistence/assign-orphaned-items.ts`). It does not load `config.ts`, so no `JWT_SECRET` is needed, and uses `console.log` deliberately.
 
 ## 4. Explore the API
 

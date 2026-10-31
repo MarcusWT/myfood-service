@@ -70,7 +70,7 @@ const validCreateInput = {
   unit: 'LITRES' as const,
   location: 'FRIDGE' as const,
   category: 'DAIRY' as const,
-  bestBefore: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  bestBefore: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
 };
 
 describe('CreateFoodItemSchema', () => {
@@ -86,7 +86,7 @@ describe('CreateFoodItemSchema', () => {
 
   it('rejects a bestBefore date in the past', () => {
     expect(() =>
-      CreateFoodItemSchema.parse({ ...validCreateInput, bestBefore: new Date('2020-01-01') }),
+      CreateFoodItemSchema.parse({ ...validCreateInput, bestBefore: '2020-01-01' }),
     ).toThrow();
   });
 
@@ -110,13 +110,47 @@ describe('CreateFoodItemSchema', () => {
   });
 });
 
-describe('UpdateFoodItemSchema', () => {
-  it('allows a partial update without bestBefore', () => {
-    expect(() => UpdateFoodItemSchema.parse({ quantity: 5 })).not.toThrow();
+describe('bestBefore strict ISO parsing', () => {
+  const parse = (bestBefore: unknown) =>
+    CreateFoodItemSchema.safeParse({ ...validCreateInput, bestBefore });
+
+  it('accepts YYYY-MM-DD as UTC midnight', () => {
+    const r = UpdateFoodItemSchema.parse({ bestBefore: '2030-02-28' });
+    expect(r.bestBefore?.toISOString()).toBe('2030-02-28T00:00:00.000Z');
   });
 
-  it('rejects a bestBefore date in the past when provided', () => {
-    expect(() => UpdateFoodItemSchema.parse({ bestBefore: new Date('2020-01-01') })).toThrow();
+  it('accepts datetimes with Z or offset', () => {
+    expect(parse('2099-01-01T10:00:00Z').success).toBe(true);
+    expect(parse('2099-01-01T10:00:00+02:00').success).toBe(true);
+  });
+
+  it.each(['2099-02-30', '2099-13-01', '2099-01-01T10:00:00', 'tomorrow', '01/01/2099', '', 4102444800000, null])(
+    'rejects %s',
+    (value) => {
+      expect(parse(value).success).toBe(false);
+    },
+  );
+});
+
+describe('UpdateFoodItemSchema', () => {
+  it('accepts a past bestBefore (checked in the service against the stored value)', () => {
+    expect(() => UpdateFoodItemSchema.parse({ bestBefore: '2020-01-01' })).not.toThrow();
+  });
+
+  it('accepts null for notes and minimumQuantity only', () => {
+    const r = UpdateFoodItemSchema.parse({ notes: null, minimumQuantity: null });
+    expect(r).toEqual({ notes: null, minimumQuantity: null });
+    expect(() => UpdateFoodItemSchema.parse({ quantity: null })).toThrow();
+    expect(() => UpdateFoodItemSchema.parse({ name: null })).toThrow();
+    expect(() => UpdateFoodItemSchema.parse({ quantity: 0 })).toThrow();
+  });
+
+  it('create rejects null notes', () => {
+    expect(() => CreateFoodItemSchema.parse({ ...validCreateInput, notes: null })).toThrow();
+  });
+
+  it('allows a partial update without bestBefore', () => {
+    expect(() => UpdateFoodItemSchema.parse({ quantity: 5 })).not.toThrow();
   });
 
   it('trims name when provided', () => {

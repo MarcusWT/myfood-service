@@ -15,7 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useCreateItem, useUpdateItem, type CreateInput } from './api';
+import { useCreateItem, useUpdateItem, type CreateInput, type UpdateInput } from './api';
 import { CATEGORIES, LOCATIONS, UNITS, label, type FoodItem } from './constants';
 
 const selectClass = 'h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm';
@@ -84,9 +84,20 @@ export function ItemFormDialog({
       if (item) {
         // The API only accepts future bestBefore, so omit it unless the user changed it.
         const { bestBefore, ...rest } = body;
+        delete rest.notes;
+        delete rest.minimumQuantity;
+        // Send optional fields only when edited (so a stale form can't clobber
+        // another client's change); null clears them.
+        const patch: UpdateInput = {
+          ...rest,
+          ...(dirtyFields.notes && { notes: v.notes ? v.notes : null }),
+          ...(dirtyFields.minimumQuantity && {
+            minimumQuantity: v.minimumQuantity !== '' ? Number(v.minimumQuantity) : null,
+          }),
+        };
         await update.mutateAsync({
           id: item.id,
-          body: dirtyFields.bestBefore ? { ...rest, bestBefore } : rest,
+          body: dirtyFields.bestBefore ? { ...patch, bestBefore } : patch,
         });
       } else {
         await create.mutateAsync(body);

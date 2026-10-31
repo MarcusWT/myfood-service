@@ -24,6 +24,9 @@ import { ExpiryAlertService } from './application/expiry-alert.service.js';
 import { RecipeService } from './application/recipe.service.js';
 import { ShoppingSummaryService } from './application/shopping-summary.service.js';
 import { NotificationPoller } from './application/notification-poller.js';
+import { NotificationLogPort } from './core/ports/outbound/notification-log.port.js';
+import { InMemoryNotificationLogRepository } from './adapters/outbound/persistence/notification-log.in-memory.repository.js';
+import { SqliteNotificationLogRepository } from './adapters/outbound/persistence/notification-log.sqlite.repository.js';
 import { AuthService } from './application/auth.service.js';
 
 // Inbound adapters (HTTP)
@@ -53,11 +56,18 @@ const healthCheckPort: HealthCheckPort =
   config.dbPath === ':memory:' || !(foodItemRepository instanceof SqliteFoodItemRepository)
     ? new InMemoryHealthCheckAdapter()
     : new SqliteHealthCheckAdapter(foodItemRepository.getConnection());
-const recipeProvider = new SpoonacularRecipeAdapter(config.spoonacularApiKey);
+const recipeProvider = new SpoonacularRecipeAdapter(config.spoonacularApiKey, {
+  searchTimeoutMs: config.spoonacularTimeoutMs,
+  enrichmentTimeoutMs: config.spoonacularEnrichmentTimeoutMs,
+  searchTtlMs: config.recipeCacheTtlMs,
+  searchCacheMaxEntries: config.recipeCacheMaxEntries,
+});
 
 const foodItemService = new FoodItemService(foodItemRepository);
 const expiryAlertService = new ExpiryAlertService(foodItemRepository);
-const recipeService = new RecipeService(foodItemRepository, recipeProvider);
+const recipeService = new RecipeService(foodItemRepository, recipeProvider, {
+  maxIngredients: config.recipeMaxIngredients,
+});
 const shoppingSummaryService = new ShoppingSummaryService(foodItemRepository);
 const authService = new AuthService(userRepository, config.jwtSecret, config.jwtExpiresIn);
 
@@ -77,11 +87,16 @@ const app = createApp(
   healthCheckPort,
 );
 
+const notificationLog: NotificationLogPort =
+  config.dbPath === ':memory:'
+    ? new InMemoryNotificationLogRepository()
+    : new SqliteNotificationLogRepository(config.dbPath);
 const notificationPort = new ConsoleNotificationAdapter();
 const notificationPoller = new NotificationPoller(
   expiryAlertService,
   notificationPort,
   userRepository,
+  notificationLog,
   config.notificationPollIntervalMs,
   config.notificationWithinDays,
 );
@@ -112,7 +127,6 @@ function shutdown(signal: string): void {
   isShuttingDown = true;
 
   logger.info(`[MYFood Service] Received ${signal}, shutting down gracefully...`);
-  notificationPoller.stop();
 
   const forceExitTimer = setTimeout(() => {
     logger.error('[MYFood Service] Graceful shutdown timed out, forcing exit.');
@@ -120,15 +134,24 @@ function shutdown(signal: string): void {
   }, 10_000);
   forceExitTimer.unref?.();
 
-  server.close((err) => {
-    if (err) {
-      logger.error({ err }, '[MYFood Service] Error while closing HTTP server');
-    } else {
-      logger.info('[MYFood Service] HTTP server closed.');
-    }
+  const stopPoller = notificationPoller
+    .stop()
+    .catch((err) => logger.error({ err }, '[MYFood Service] Error while stopping poller'));
+  const closeServer = new Promise<void>((resolve) => {
+    server.close((err) => {
+      if (err) {
+        logger.error({ err }, '[MYFood Service] Error while closing HTTP server');
+      } else {
+        logger.info('[MYFood Service] HTTP server closed.');
+      }
+      resolve();
+    });
+  });
 
+  void Promise.all([stopPoller, closeServer]).then(() => {
     closeIfPossible(foodItemRepository);
     closeIfPossible(userRepository);
+    closeIfPossible(notificationLog);
     logger.info('[MYFood Service] Database connections closed. Exiting.');
 
     clearTimeout(forceExitTimer);

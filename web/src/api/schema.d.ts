@@ -377,7 +377,12 @@ export interface paths {
                         location: "FRIDGE" | "FREEZER" | "PANTRY";
                         /** @enum {string} */
                         category: "DAIRY" | "MEAT" | "SEAFOOD" | "VEGETABLES" | "FRUITS" | "GRAINS" | "CONDIMENTS" | "BEVERAGES" | "SNACKS" | "FROZEN" | "OTHER";
-                        bestBefore: string | null;
+                        /**
+                         * Format: date-time
+                         * @description ISO 8601 datetime with timezone, or a date-only value (YYYY-MM-DD) which is interpreted as UTC midnight. On create, a date-only value for today is not in the future and is rejected.
+                         * @example 2026-08-12T00:00:00Z
+                         */
+                        bestBefore: string;
                         notes?: string;
                         minimumQuantity?: number;
                     };
@@ -546,7 +551,10 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Update a food item */
+        /**
+         * Update a food item
+         * @description Partial update. Omitted fields are unchanged; send null for notes or minimumQuantity to clear them. bestBefore must be a future date only when it differs from the stored value.
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -567,9 +575,14 @@ export interface paths {
                         location?: "FRIDGE" | "FREEZER" | "PANTRY";
                         /** @enum {string} */
                         category?: "DAIRY" | "MEAT" | "SEAFOOD" | "VEGETABLES" | "FRUITS" | "GRAINS" | "CONDIMENTS" | "BEVERAGES" | "SNACKS" | "FROZEN" | "OTHER";
-                        bestBefore?: string | null;
-                        notes?: string;
-                        minimumQuantity?: number;
+                        /**
+                         * Format: date-time
+                         * @description ISO 8601 datetime with timezone, or a date-only value (YYYY-MM-DD) which is interpreted as UTC midnight. On create, a date-only value for today is not in the future and is rejected.
+                         * @example 2026-08-12T00:00:00Z
+                         */
+                        bestBefore?: string;
+                        notes?: string | null;
+                        minimumQuantity?: number | null;
                     };
                 };
             };

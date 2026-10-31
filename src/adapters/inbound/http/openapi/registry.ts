@@ -5,6 +5,7 @@ import {
   CreateFoodItemSchema,
   UpdateFoodItemSchema,
   DisposeFoodItemSchema,
+  StrictIsoDateSchema,
 } from '../../../../core/domain/food-item.js';
 import { RegisterInputSchema, LoginInputSchema } from '../../../../core/domain/user.js';
 import { AlertQuerySchema } from '../expiry-alert.controller.js';
@@ -14,6 +15,18 @@ import { RecipeQuerySchema } from '../recipe.controller.js';
 // adapter module (not `core/domain`) so the domain layer stays free of
 // infrastructure-specific imports.
 extendZodWithOpenApi(z);
+
+// Docs-only variants: the domain transform hides the wire format, so describe
+// bestBefore explicitly. Runtime validation still uses the domain schemas.
+const BestBeforeDoc = StrictIsoDateSchema.openapi({
+  type: 'string',
+  format: 'date-time',
+  example: '2026-08-12T00:00:00Z',
+  description:
+    'ISO 8601 datetime with timezone, or a date-only value (YYYY-MM-DD) which is interpreted as UTC midnight. On create, a date-only value for today is not in the future and is rejected.',
+});
+const CreateFoodItemDoc = CreateFoodItemSchema.innerType().extend({ bestBefore: BestBeforeDoc });
+const UpdateFoodItemDoc = UpdateFoodItemSchema.extend({ bestBefore: BestBeforeDoc.optional() });
 
 export const registry = new OpenAPIRegistry();
 
@@ -311,7 +324,7 @@ registry.registerPath({
   security: authSecurity,
   request: {
     body: {
-      content: { 'application/json': { schema: CreateFoodItemSchema } },
+      content: { 'application/json': { schema: CreateFoodItemDoc } },
     },
   },
   responses: {
@@ -375,11 +388,13 @@ registry.registerPath({
   path: '/food-items/{id}',
   tags: ['Food Items'],
   summary: 'Update a food item',
+  description:
+    'Partial update. Omitted fields are unchanged; send null for notes or minimumQuantity to clear them. bestBefore must be a future date only when it differs from the stored value.',
   security: authSecurity,
   request: {
     params: IdParam,
     body: {
-      content: { 'application/json': { schema: UpdateFoodItemSchema } },
+      content: { 'application/json': { schema: UpdateFoodItemDoc } },
     },
   },
   responses: {

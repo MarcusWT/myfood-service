@@ -90,6 +90,51 @@ describe('inventory', () => {
     expect(await within(dialog).findByText('bestBefore must be a future date')).toBeInTheDocument();
   });
 
+  it('omits untouched notes/minimumQuantity when editing', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.get(`${API}/food-items`, () =>
+        HttpResponse.json(page([makeItem({ notes: 'old', minimumQuantity: 2 })])),
+      ),
+      http.patch(`${API}/food-items/:id`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(makeItem());
+      }),
+    );
+    renderApp('/inventory');
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Milk' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.clear(within(dialog).getByLabelText('Name'));
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Oat milk');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body).toMatchObject({ name: 'Oat milk' });
+    expect(body).not.toHaveProperty('notes');
+    expect(body).not.toHaveProperty('minimumQuantity');
+  });
+
+  it('sends null for emptied notes/minimumQuantity when editing', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.get(`${API}/food-items`, () =>
+        HttpResponse.json(page([makeItem({ notes: 'old', minimumQuantity: 2 })])),
+      ),
+      http.patch(`${API}/food-items/:id`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(makeItem());
+      }),
+    );
+    renderApp('/inventory');
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Milk' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.clear(within(dialog).getByLabelText('Notes'));
+    await userEvent.clear(within(dialog).getByLabelText('Low-stock threshold'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body).toMatchObject({ notes: null, minimumQuantity: null });
+    expect(body).not.toHaveProperty('bestBefore');
+  });
+
   it('confirms before marking consumed, then calls dispose', async () => {
     let body: unknown;
     server.use(

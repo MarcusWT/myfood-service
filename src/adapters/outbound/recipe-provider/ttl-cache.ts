@@ -11,6 +11,8 @@ interface CacheEntry<T> {
 export class TtlCache<T> {
   private readonly store = new Map<string, CacheEntry<T>>();
 
+  constructor(private readonly maxEntries: number = Number.POSITIVE_INFINITY) {}
+
   get(key: string): T | undefined {
     const entry = this.store.get(key);
     if (!entry) return undefined;
@@ -24,7 +26,23 @@ export class TtlCache<T> {
   }
 
   set(key: string, value: T, ttlMs: number): void {
+    this.store.delete(key);
+    if (this.store.size >= this.maxEntries) {
+      this.prune();
+      while (this.store.size >= this.maxEntries) {
+        const oldest = this.store.keys().next();
+        if (oldest.done) break;
+        this.store.delete(oldest.value);
+      }
+    }
     this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+
+  prune(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.store) {
+      if (entry.expiresAt <= now) this.store.delete(key);
+    }
   }
 
   delete(key: string): void {

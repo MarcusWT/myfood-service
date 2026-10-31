@@ -61,32 +61,51 @@ Effort: S = under half a day, M = 1-2 days, L = more than 2 days.
 
 ---
 
-## Tier 2: Reliability before real notifications ship
+## Tier 2: Reliability before real notifications ship — items 8-12 DONE
 
-### 8. Notification poller overlap and repeat sends (S to M)
+### Status: items 8-12 done (planned, implemented, reviewed, fixed, re-tested; no HIGH findings)
+- Final state: root typecheck/lint/build and 359 backend tests pass; web typecheck/lint/build, 35 tests and e2e pass; runtime smoke test showed one notification across ~8 ticks, PATCH null clearing, 400 on malformed `bestBefore`, clean SIGINT shutdown. Web `format:check` still only has the 2 pre-existing failures.
+- Item 8: chained `setTimeout` poller (no overlap, idempotent `start()`, `stop()` awaits in-flight poll); `NotificationLogPort` + `notifications_sent` (migration 007) dedupes per user/item/status/UTC day; delivery is at-least-once (notify, then mark). Shutdown stops poller and HTTP server concurrently, then closes DBs.
+- Item 9: strict ISO `bestBefore` (`YYYY-MM-DD` = UTC midnight, or full datetime with Z/offset). Future-only on create; on PATCH only when the value changes (checked in `FoodItemService.updateItem`). `quantity` stays > 0 (use dispose CONSUMED for "ran out"). OpenAPI uses docs-only `CreateFoodItemDoc`/`UpdateFoodItemDoc` in `registry.ts`.
+- Item 10: `notes`/`minimumQuantity` accept `null` on PATCH to clear; SQLite `update` is a single `UPDATE … RETURNING`; in-memory uses `applyUpdate`. Web form sends dirty-only values, `null` when emptied. `schema.d.ts` regenerated from a live backend.
+- Item 11: `x-api-key` header, search timeout, bounded `TtlCache`, search-result cache with in-flight coalescing (normalised ingredient key also used upstream), no key in logs/errors, ingredients capped and sorted by soonest expiry. New env vars: `SPOONACULAR_TIMEOUT_MS`, `SPOONACULAR_ENRICHMENT_TIMEOUT_MS`, `RECIPE_CACHE_TTL_MS`, `RECIPE_CACHE_MAX_ENTRIES`, `RECIPE_MAX_INGREDIENTS`.
+- Item 12: CLI `npm run assign-orphans -- --email <user> [--dry-run]` (prod: `node dist/cli/assign-orphaned-items.js`). Orphan duplicates are soft-discarded, never deleted. Startup guard stays strict; its message points to the CLI.
+- Deploy notes: migration 007 runs automatically; item 11 changes how the key is sent (header, not query); legacy-DB flow requires a registered user first.
+
+### Follow-ups from review (medium/low, not yet done)
+- `NotificationPoller`: a manual `poll()` in flight before `start()` means `start()` never schedules; fix by calling `schedule()` in `poll()`'s `finally` (unreachable in production).
+- SQLite update-time unique violation gives a generic `ConflictError` message (service pre-check and in-memory use the detailed one).
+- `UpdateFoodItemDoc` repeats the create-only "same-day date is not future" note; spec says `date-time` though date-only is accepted. Add a test that the OpenAPI schema keys match the domain schemas.
+- Missing tests: service-level `bestBefore` changed-only check, SQLite update-time conflict, SQLite single-statement `update` assertion, date-only unchanged PATCH.
+- `NotificationLog` SQLite adapter opens a third connection and `filterUnsent` does one SELECT per alert; consider sharing the connection and batching.
+- Search path has no negative caching/circuit breaker; a Spoonacular outage costs 8s per new request; `TtlCache` is FIFO, not LRU.
+- `assign-orphans` entry-point detection breaks via symlinks (use `realpathSync`); `tsx` is needed for the npm script, so confirm it is a dependency, and that the Dockerfile ships `dist/cli`.
+- Empty PATCH `{}` still bumps `updated_at`.
+
+### 8. Notification poller overlap and repeat sends (S to M) — DONE
 - Sources: BE 2, BE 29, HEALTH 7.
 - The poller can overlap runs, because `setInterval` has no in-flight guard, and it re-sends the same expiring items every tick.
 - Quick fix (S): a `running` guard or chained `setTimeout`, and awaiting the in-flight poll at shutdown.
 - Proper fix (M): a `notifications_sent` table behind a `NotificationLogPort`, notifying only on state transitions or once per day per item.
 - This must be done before any email or webhook adapter (F6 below).
 
-### 9. Date validation rules: future-only `bestBefore` and `quantity > 0` (S)
+### 9. Date validation rules: future-only `bestBefore` and `quantity > 0` (S) — DONE
 - Sources: BE 3, HEALTH 9.
 - Items that are already expired can't be added, and a client that resends a whole object with a past `bestBefore` fails on PATCH. Enforce the future rule only when the value changes, or allow a grace period.
 - Decide whether quantity 0 should be allowed. This affects the consume and low-stock flows.
 - Use stricter ISO date parsing than `z.coerce.date()`.
 
-### 10. PATCH can't clear `notes` or `minimumQuantity` (S to M)
+### 10. PATCH can't clear `notes` or `minimumQuantity` (S to M) — DONE
 - Source: HEALTH 3.
 - Allow `.nullable()` on these fields, and run `update` as a single statement (`UPDATE … RETURNING`) to close the lost-update window (BE 17).
 
-### 11. Spoonacular adapter robustness and key leakage (S to M)
+### 11. Spoonacular adapter robustness and key leakage (S to M) — DONE
 - Sources: BE 12b, BE 28.
 - Add a timeout to `findByIngredients`; today only the enrichment call has one.
 - Pass the key in the `x-api-key` header, and log only `err.message`.
 - Cache results per ingredient set, bound the TTL cache, and cap and prioritise soon-to-expire ingredients.
 
-### 12. Legacy `user_id IS NULL` row blocks startup (S)
+### 12. Legacy `user_id IS NULL` row blocks startup (S) — DONE
 - Source: HEALTH 6.
 - Provide an env flag or CLI to assign orphaned rows to a user, rather than requiring manual SQL.
 
@@ -252,4 +271,4 @@ Suggested order: quick wins first, then layout, then skeletons, then inventory, 
 ## Not yet reviewed
 - Recipe and shopping-summary controllers, `ttl-cache.ts`, `.github/workflows/ci.yml`.
 - Web token storage and 401 handling, web tests and Playwright e2e.
-- Later phases of `frontend-implementation.md`, and a diff of `web/src/api/schema.d.ts` against a live backend.
+- Later phases of `frontend-implementation.md`. (`web/src/api/schema.d.ts` was diffed against a live backend and regenerated during Tier 2.)

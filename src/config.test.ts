@@ -112,4 +112,44 @@ describe('config', () => {
     expect((await load()).trustProxy).toBe(false);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('TRUST_PROXY'));
   });
+
+  describe('Spoonacular / recipe cache vars', () => {
+    const VARS = [
+      'SPOONACULAR_TIMEOUT_MS',
+      'SPOONACULAR_ENRICHMENT_TIMEOUT_MS',
+      'RECIPE_CACHE_TTL_MS',
+      'RECIPE_CACHE_MAX_ENTRIES',
+    ];
+    beforeEach(() => {
+      for (const v of VARS) delete process.env[v];
+    });
+
+    it('uses defaults', async () => {
+      const c = await load();
+      expect(c.spoonacularTimeoutMs).toBe(8000);
+      expect(c.spoonacularEnrichmentTimeoutMs).toBe(5000);
+      expect(c.recipeCacheTtlMs).toBe(600_000);
+      expect(c.recipeCacheMaxEntries).toBe(500);
+    });
+
+    it('accepts overrides', async () => {
+      process.env.SPOONACULAR_TIMEOUT_MS = '1234';
+      process.env.SPOONACULAR_ENRICHMENT_TIMEOUT_MS = '2345';
+      process.env.RECIPE_CACHE_TTL_MS = '3456';
+      process.env.RECIPE_CACHE_MAX_ENTRIES = '7';
+      const c = await load();
+      expect(c.spoonacularTimeoutMs).toBe(1234);
+      expect(c.spoonacularEnrichmentTimeoutMs).toBe(2345);
+      expect(c.recipeCacheTtlMs).toBe(3456);
+      expect(c.recipeCacheMaxEntries).toBe(7);
+    });
+
+    it.each(VARS.flatMap((v) => ['abc', '0', '-5', '1.5'].map((x) => [v, x])))(
+      'rejects %s=%s',
+      async (name, value) => {
+        process.env[name] = value;
+        await expect(load()).rejects.toThrow(name);
+      },
+    );
+  });
 });

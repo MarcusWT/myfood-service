@@ -1,3 +1,4 @@
+import { ZodError } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../core/domain/food-item.js';
 import { PaginatedResult, PaginationInput } from '../core/domain/pagination.js';
@@ -58,6 +59,12 @@ export class FoodItemService implements FoodItemServicePort {
     const existing = await this.repository.findById(id, userId);
     if (!existing) {
       throw new NotFoundError(`Food item with id '${id}' not found`);
+    }
+
+    if (input.bestBefore !== undefined && input.bestBefore.getTime() !== existing.bestBefore.getTime() && input.bestBefore.getTime() <= Date.now()) {
+      throw new ZodError([
+        { code: 'custom', path: ['bestBefore'], message: 'bestBefore must be a future date' },
+      ]);
     }
 
     if (input.name !== undefined || input.location !== undefined) {

@@ -33,6 +33,11 @@ export const config = {
   port: parseNumberEnv('PORT', process.env.PORT, 3000, { min: 0, max: 65535 }),
   dbPath: process.env.DB_PATH ?? path.resolve(process.cwd(), 'data', 'myfood.db'),
   spoonacularApiKey: process.env.SPOONACULAR_API_KEY ?? '',
+  spoonacularTimeoutMs: parseNumberEnv('SPOONACULAR_TIMEOUT_MS', process.env.SPOONACULAR_TIMEOUT_MS, 8000, { min: 1, max: MAX_TIMER_MS }),
+  spoonacularEnrichmentTimeoutMs: parseNumberEnv('SPOONACULAR_ENRICHMENT_TIMEOUT_MS', process.env.SPOONACULAR_ENRICHMENT_TIMEOUT_MS, 5000, { min: 1, max: MAX_TIMER_MS }),
+  recipeCacheTtlMs: parseNumberEnv('RECIPE_CACHE_TTL_MS', process.env.RECIPE_CACHE_TTL_MS, 600_000, { min: 1 }),
+  recipeCacheMaxEntries: parseNumberEnv('RECIPE_CACHE_MAX_ENTRIES', process.env.RECIPE_CACHE_MAX_ENTRIES, 500, { min: 1 }),
+  recipeMaxIngredients: parseNumberEnv('RECIPE_MAX_INGREDIENTS', process.env.RECIPE_MAX_INGREDIENTS, 10, { min: 1, max: 50 }),
   expiryAlertDefaultDays: expiryAlertDefaultDays,
   notificationPollIntervalMs: parseNumberEnv(
     'NOTIFICATION_POLL_INTERVAL_MS',

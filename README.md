@@ -124,6 +124,19 @@ docker run -p 3000:3000 \
 
 ---
 
+## Upgrading: legacy items with no owner
+
+Databases created before authentication may contain `food_items` rows with no `user_id`. The server refuses to start (`food_items table has N row(s) with no user_id`) rather than leave them silently invisible. Register a user first, then assign the rows to it:
+
+```bash
+npm run assign-orphans -- --email you@example.com --dry-run   # preview
+npm run assign-orphans -- --email you@example.com             # apply
+# built/prod: node dist/cli/assign-orphaned-items.js --email you@example.com
+# Docker:     docker compose run --rm myfood-service node dist/cli/assign-orphaned-items.js --email you@example.com
+```
+
+It uses `DB_PATH` (default `./data/myfood.db`), is idempotent, and soft-discards (never deletes) orphaned items that duplicate one of the user's active items (same name + location).
+
 ## API Reference
 
 All endpoints are prefixed with `/api/v1`.
@@ -135,7 +148,7 @@ All endpoints are prefixed with `/api/v1`.
 | `POST` | `/food-items` | Add a new food item |
 | `GET` | `/food-items` | List items (filter: `?location=FRIDGE&category=DAIRY&name=milk`) |
 | `GET` | `/food-items/:id` | Get a single item |
-| `PATCH` | `/food-items/:id` | Update an item |
+| `PATCH` | `/food-items/:id` | Update an item (partial; send `null` for `notes`/`minimumQuantity` to clear them; `bestBefore` must be a future date only if changed) |
 | `DELETE` | `/food-items/:id` | Remove an item |
 
 **Create body example:**
@@ -151,6 +164,8 @@ All endpoints are prefixed with `/api/v1`.
   "notes": "Full fat"
 }
 ```
+
+**`bestBefore`:** ISO 8601 datetime with timezone, or a date-only `YYYY-MM-DD` which is interpreted as **UTC midnight**. On create it must be in the future, so a date-only value for today (already past UTC midnight) is rejected; send a datetime later today instead.
 
 **Enums:**
 
@@ -202,6 +217,11 @@ Returns a shopping list summary grouped by category. Includes items that are exp
 | `PORT` | `3000` | HTTP port (integer 0–65535) |
 | `DB_PATH` | `./data/myfood.db` (relative to the process working directory) | SQLite database file path |
 | `SPOONACULAR_API_KEY` | — | Required for recipe suggestions |
+| `SPOONACULAR_TIMEOUT_MS` | `8000` | Timeout for the Spoonacular search call (the API key is sent via the `x-api-key` header, never in the URL) |
+| `SPOONACULAR_ENRICHMENT_TIMEOUT_MS` | `5000` | Timeout for each per-recipe enrichment call |
+| `RECIPE_CACHE_TTL_MS` | `600000` | TTL of cached recipe search results |
+| `RECIPE_CACHE_MAX_ENTRIES` | `500` | Max cached recipe searches (integer ≥ 1) |
+| `RECIPE_MAX_INGREDIENTS` | `10` | Max ingredients (soonest-expiring first) sent per suggestion search (1–50) |
 | `EXPIRY_ALERT_DEFAULT_DAYS` | `7` | Default alert window in days (integer 0–3650) |
 | `JWT_SECRET` | — | **Required** outside the `test` environment; the app throws at startup if unset |
 | `JWT_EXPIRES_IN` | `24h` | JWT token expiry |

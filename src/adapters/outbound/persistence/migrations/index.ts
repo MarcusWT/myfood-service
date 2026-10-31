@@ -5,6 +5,7 @@ import { addUserIdToFoodItemsMigration } from './003-add-user-id-to-food-items.j
 import { createUsersMigration } from './004-create-users.js';
 import { addDispositionMigration } from './005-add-disposition.js';
 import { uniqueActiveFoodItemNameMigration } from './006-unique-active-food-item-name.js';
+import { createNotificationsSentMigration } from './007-create-notifications-sent.js';
 
 export type { Migration };
 export { runMigrations } from './migration-runner.js';
@@ -26,4 +27,5 @@ export const allMigrations: Migration[] = [
   createUsersMigration,
   addDispositionMigration,
   uniqueActiveFoodItemNameMigration,
+  createNotificationsSentMigration,
 ];

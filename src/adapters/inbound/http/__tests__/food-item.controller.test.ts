@@ -282,6 +282,54 @@ describe('FoodItemController (HTTP)', () => {
   });
 
   describe('PATCH /api/v1/food-items/:id', () => {
+    it('rejects a changed bestBefore in the past with a path-tagged 400', async () => {
+      const item = await seedFoodItem(repo, { userId });
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
+        .send({ bestBefore: '2020-01-01T00:00:00.000Z' });
+      expect(res.status).toBe(400);
+      expect(res.body.details[0].path).toEqual(['bestBefore']);
+      expect(res.body.details[0].message).toBe('bestBefore must be a future date');
+    });
+
+    it('accepts resending an unchanged (already past) bestBefore', async () => {
+      const item = await seedFoodItem(repo, { userId });
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
+        .send({ bestBefore: item.bestBefore.toISOString(), quantity: 3 });
+      expect(res.status).toBe(200);
+      expect(res.body.quantity).toBe(3);
+    });
+
+    it('returns 400 for a malformed bestBefore', async () => {
+      const item = await seedFoodItem(repo, { userId });
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
+        .send({ bestBefore: 'nope' });
+      expect(res.status).toBe(400);
+    });
+
+    it('clears notes and minimumQuantity with null', async () => {
+      const item = await seedFoodItem(repo, { userId, notes: 'hi', minimumQuantity: 5 });
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
+        .send({ notes: null, minimumQuantity: null });
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty('notes');
+      expect(res.body).not.toHaveProperty('minimumQuantity');
+      const get = await request(app).get(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader);
+      expect(get.body).not.toHaveProperty('notes');
+      expect(get.body).not.toHaveProperty('minimumQuantity');
+    });
+
+    it('returns 400 for quantity null', async () => {
+      const item = await seedFoodItem(repo, { userId });
+      const res = await request(app)
+        .patch(`/api/v1/food-items/${item.id}`).set('Authorization', authHeader)
+        .send({ quantity: null });
+      expect(res.status).toBe(400);
+    });
+
     it('updates and returns the item on valid partial body', async () => {
       const item = await seedFoodItem(repo, { userId,  quantity: 1 });
 
