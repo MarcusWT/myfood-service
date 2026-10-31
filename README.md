@@ -199,22 +199,22 @@ Returns a shopping list summary grouped by category. Includes items that are exp
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3000` | HTTP port |
-| `DB_PATH` | `./data/myfood.db` | SQLite database file path |
+| `PORT` | `3000` | HTTP port (integer 0–65535) |
+| `DB_PATH` | `./data/myfood.db` (relative to the process working directory) | SQLite database file path |
 | `SPOONACULAR_API_KEY` | — | Required for recipe suggestions |
-| `EXPIRY_ALERT_DEFAULT_DAYS` | `7` | Default alert window in days |
+| `EXPIRY_ALERT_DEFAULT_DAYS` | `7` | Default alert window in days (integer 0–3650) |
 | `JWT_SECRET` | — | **Required** outside the `test` environment; the app throws at startup if unset |
 | `JWT_EXPIRES_IN` | `24h` | JWT token expiry |
 | `LOG_LEVEL` | `info` | pino log level (`silent` forced in `test` env) |
-| `RATE_LIMIT_WINDOW_MS` | `900000` | Rate limit window (ms) for the general `/api/v1` limiter |
-| `RATE_LIMIT_MAX` | `200` | Max requests per window per IP for all `/api/v1` routes |
-| `AUTH_RATE_LIMIT_MAX` | `10` | Max requests per window per IP for `/auth/register` and `/auth/login` |
-| `RECIPE_RATE_LIMIT_MAX` | `20` | Max requests per window per IP for `/recipes/suggestions` (proxies the metered Spoonacular API) |
+| `RATE_LIMIT_WINDOW_MS` | `900000` | Rate limit window (ms, integer 1–2147483647) for the general `/api/v1` limiter |
+| `RATE_LIMIT_MAX` | `200` | Max requests per window per IP (integer ≥ 1) for all `/api/v1` routes |
+| `AUTH_RATE_LIMIT_MAX` | `10` | Max requests per window per IP (integer ≥ 1) for `/auth/register` and `/auth/login` |
+| `RECIPE_RATE_LIMIT_MAX` | `20` | Max requests per window per IP (integer ≥ 1) for `/recipes/suggestions` (proxies the metered Spoonacular API) |
 | `BODY_LIMIT` | `100kb` | Max JSON request body size |
-| `NOTIFICATION_POLL_INTERVAL_MS` | `3600000` (1h) | How often the background `NotificationPoller` checks for expiring items |
-| `NOTIFICATION_WITHIN_DAYS` | falls back to `EXPIRY_ALERT_DEFAULT_DAYS` | Window used by the notification poller specifically |
+| `NOTIFICATION_POLL_INTERVAL_MS` | `3600000` (1h) | How often the background `NotificationPoller` checks for expiring items (ms, integer 1000–2147483647) |
+| `NOTIFICATION_WITHIN_DAYS` | falls back to `EXPIRY_ALERT_DEFAULT_DAYS` | Window used by the notification poller specifically (integer 0–3650) |
 | `CORS_ORIGIN` | `*` | Comma-separated list of allowed CORS origins. Defaults to `*` (any origin) for dev convenience; set explicitly in shared/production environments |
-| `TRUST_PROXY` | `false` | Express `trust proxy` setting. Set to a hop count (e.g. `1`) when behind a reverse proxy/load balancer so the rate limiter sees the real client IP |
+| `TRUST_PROXY` | `false` | Express `trust proxy` setting. Set to a hop count (e.g. `1`) when behind a reverse proxy/load balancer so the rate limiter sees the real client IP. Accepts `true`/`false` or a non-negative number |
 
 Rate limiting is automatically disabled in the `test` environment (`NODE_ENV=test`) so the HTTP integration test suite isn't affected by its own rapid sequential requests.
 

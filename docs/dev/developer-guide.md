@@ -27,14 +27,14 @@ via `dotenv/config`, imported at the top of `src/config.ts` — no extra setup n
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `PORT` | `3000` | HTTP port the server listens on |
-| `DB_PATH` | `./data/myfood.db` | Path to the SQLite file. Set to `:memory:` to use the in-memory repository instead (data is lost on restart) |
+| `PORT` | `3000` | HTTP port (integer 0–65535) the server listens on |
+| `DB_PATH` | `./data/myfood.db` (relative to the process working directory) | Path to the SQLite file. Set to `:memory:` to use the in-memory repository instead (data is lost on restart) |
 | `SPOONACULAR_API_KEY` | *(none)* | Required for `/recipes/suggestions`. Missing it only logs a warning at startup — the server still starts, but recipe requests fail at request time. Get a free key at [spoonacular.com/food-api](https://spoonacular.com/food-api) |
-| `EXPIRY_ALERT_DEFAULT_DAYS` | `7` | Default "expiring within N days" window used by `/alerts/expiry` and the shopping summary when no query override is given |
-| `NOTIFICATION_POLL_INTERVAL_MS` | `3600000` (1h) | How often the background `NotificationPoller` checks for expiring items |
-| `NOTIFICATION_WITHIN_DAYS` | falls back to `EXPIRY_ALERT_DEFAULT_DAYS` | Window used by the notification poller specifically |
+| `EXPIRY_ALERT_DEFAULT_DAYS` | `7` | Default "expiring within N days" window used by `/alerts/expiry` and the shopping summary when no query override is given (integer 0–3650) |
+| `NOTIFICATION_POLL_INTERVAL_MS` | `3600000` (1h) | How often the background `NotificationPoller` checks for expiring items (ms, integer 1000–2147483647) |
+| `NOTIFICATION_WITHIN_DAYS` | falls back to `EXPIRY_ALERT_DEFAULT_DAYS` | Window used by the notification poller specifically (integer 0–3650) |
 | `CORS_ORIGIN` | `*` | Comma-separated list of allowed CORS origins. Defaults to `*` (any origin) for dev convenience; set explicitly in shared/production environments |
-| `TRUST_PROXY` | `false` | Express `trust proxy` setting. Set to a hop count (e.g. `1`) when behind a reverse proxy/load balancer so the rate limiter sees the real client IP |
+| `TRUST_PROXY` | `false` | Express `trust proxy` setting. Set to a hop count (e.g. `1`) when behind a reverse proxy/load balancer so the rate limiter sees the real client IP. Accepts `true`/`false` or a non-negative number |
 
 `DB_PATH`'s parent directory is created automatically via `fs.mkdirSync` in `src/index.ts` on
 startup, so `./data/` does not need to be created manually.

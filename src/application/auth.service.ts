@@ -22,9 +22,9 @@ export class UnauthorizedError extends Error {
   }
 }
 
-interface JwtPayload {
-  sub: string;
-}
+const JWT_ALGORITHM = 'HS256';
+const JWT_ISSUER = 'myfood-service';
+const JWT_AUDIENCE = 'myfood-api';
 
 export class AuthService implements AuthServicePort {
   constructor(
@@ -72,7 +72,14 @@ export class AuthService implements AuthServicePort {
 
   async verifyToken(token: string): Promise<string> {
     try {
-      const payload = jwt.verify(token, this.jwtSecret) as JwtPayload;
+      const payload = jwt.verify(token, this.jwtSecret, {
+        algorithms: [JWT_ALGORITHM],
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+      });
+      if (typeof payload === 'string' || typeof payload.sub !== 'string' || !payload.sub) {
+        throw new UnauthorizedError('Invalid or expired token');
+      }
       return payload.sub;
     } catch {
       throw new UnauthorizedError('Invalid or expired token');
@@ -89,6 +96,9 @@ export class AuthService implements AuthServicePort {
 
   private signToken(userId: string): string {
     return jwt.sign({ sub: userId }, this.jwtSecret, {
+      algorithm: JWT_ALGORITHM,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
       expiresIn: this.jwtExpiresIn,
     } as jwt.SignOptions);
   }

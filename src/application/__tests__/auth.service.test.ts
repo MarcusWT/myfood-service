@@ -4,6 +4,13 @@ import { AuthService, UnauthorizedError } from '../auth.service.js';
 import { ConflictError } from '../food-item.service.js';
 import { InMemoryUserRepository } from '../../adapters/outbound/persistence/user.in-memory.repository.js';
 
+const SECRET = 'test-secret-not-for-production';
+const GOOD_OPTS: jwt.SignOptions = {
+  algorithm: 'HS256',
+  issuer: 'myfood-service',
+  audience: 'myfood-api',
+};
+
 describe('AuthService', () => {
   let userRepository: InMemoryUserRepository;
   let service: AuthService;
@@ -107,11 +114,59 @@ describe('AuthService', () => {
         email: 'carol@example.com',
         password: 'password123',
       });
-      const expiredToken = jwt.sign({ sub: user.id }, 'test-secret-not-for-production', {
+      const expiredToken = jwt.sign({ sub: user.id }, SECRET, {
+        ...GOOD_OPTS,
         expiresIn: -10,
       });
 
       await expect(service.verifyToken(expiredToken)).rejects.toThrow(UnauthorizedError);
+    });
+
+    it('issues tokens with HS256 header, issuer and audience', async () => {
+      const { token } = await service.register({ email: 'd@example.com', password: 'password123' });
+      const decoded = jwt.decode(token, { complete: true });
+      expect(decoded?.header.alg).toBe('HS256');
+      expect(decoded?.payload).toMatchObject({ iss: 'myfood-service', aud: 'myfood-api' });
+    });
+
+    it('accepts a correctly formed token', async () => {
+      const token = jwt.sign({ sub: 'u1' }, SECRET, GOOD_OPTS);
+      await expect(service.verifyToken(token)).resolves.toBe('u1');
+    });
+
+    it('rejects a token signed with HS512', async () => {
+      const token = jwt.sign({ sub: 'u1' }, SECRET, { ...GOOD_OPTS, algorithm: 'HS512' });
+      await expect(service.verifyToken(token)).rejects.toThrow(UnauthorizedError);
+    });
+
+    it('rejects an alg=none token', async () => {
+      const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+      const token = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({
+        sub: 'u1',
+        iss: 'myfood-service',
+        aud: 'myfood-api',
+      })}.`;
+      await expect(service.verifyToken(token)).rejects.toThrow(UnauthorizedError);
+    });
+
+    it('rejects a token without sub', async () => {
+      const token = jwt.sign({}, SECRET, GOOD_OPTS);
+      await expect(service.verifyToken(token)).rejects.toThrow(UnauthorizedError);
+    });
+
+    it('rejects a token with a non-string sub', async () => {
+      const token = jwt.sign({ sub: 123 as unknown as string }, SECRET, GOOD_OPTS);
+      await expect(service.verifyToken(token)).rejects.toThrow(UnauthorizedError);
+    });
+
+    it.each([
+      ['wrong issuer', { issuer: 'evil', audience: 'myfood-api' }],
+      ['wrong audience', { issuer: 'myfood-service', audience: 'other' }],
+      ['missing issuer', { audience: 'myfood-api' }],
+      ['missing audience', { issuer: 'myfood-service' }],
+    ])('rejects a token with %s', async (_name, opts) => {
+      const token = jwt.sign({ sub: 'u1' }, SECRET, { algorithm: 'HS256', ...opts });
+      await expect(service.verifyToken(token)).rejects.toThrow(UnauthorizedError);
     });
   });
 });

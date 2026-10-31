@@ -4,19 +4,9 @@ import { PaginatedResult, PaginationInput } from '../core/domain/pagination.js';
 import { FoodItemServicePort } from '../core/ports/inbound/food-item.service.port.js';
 import { FoodItemRepositoryPort } from '../core/ports/outbound/food-item.repository.port.js';
 
-export class NotFoundError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'NotFoundError';
-  }
-}
+import { NotFoundError, ConflictError } from '../core/domain/errors.js';
 
-export class ConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ConflictError';
-  }
-}
+export { NotFoundError, ConflictError };
 
 export class FoodItemService implements FoodItemServicePort {
   constructor(private readonly repository: FoodItemRepositoryPort) {}

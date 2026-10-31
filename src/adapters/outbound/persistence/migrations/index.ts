@@ -4,6 +4,7 @@ import { addMinimumQuantityMigration } from './002-add-minimum-quantity.js';
 import { addUserIdToFoodItemsMigration } from './003-add-user-id-to-food-items.js';
 import { createUsersMigration } from './004-create-users.js';
 import { addDispositionMigration } from './005-add-disposition.js';
+import { uniqueActiveFoodItemNameMigration } from './006-unique-active-food-item-name.js';
 
 export type { Migration };
 export { runMigrations } from './migration-runner.js';
@@ -24,4 +25,5 @@ export const allMigrations: Migration[] = [
   addUserIdToFoodItemsMigration,
   createUsersMigration,
   addDispositionMigration,
+  uniqueActiveFoodItemNameMigration,
 ];

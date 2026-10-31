@@ -1,28 +1,63 @@
 import 'dotenv/config';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const MAX_TIMER_MS = 2_147_483_647;
+
+function parseNumberEnv(
+  name: string,
+  raw: string | undefined,
+  fallback: number,
+  opts: { min: number; max?: number; integer?: boolean },
+): number {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const { min, max = Number.POSITIVE_INFINITY, integer = true } = opts;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || (integer && !Number.isInteger(value)) || value < min || value > max) {
+    const range = Number.isFinite(max) ? `between ${min} and ${max}` : `at least ${min}`;
+    throw new Error(
+      `[Config] ${name} must be ${integer ? 'an integer' : 'a number'} ${range}; got '${raw}'.`,
+    );
+  }
+  return value;
+}
+
+const expiryAlertDefaultDays = parseNumberEnv(
+  'EXPIRY_ALERT_DEFAULT_DAYS',
+  process.env.EXPIRY_ALERT_DEFAULT_DAYS,
+  7,
+  { min: 0, max: 3650 },
+);
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
-  port: Number(process.env.PORT ?? 3000),
-  dbPath: process.env.DB_PATH ?? path.join(__dirname, '..', '..', 'data', 'myfood.db'),
+  port: parseNumberEnv('PORT', process.env.PORT, 3000, { min: 0, max: 65535 }),
+  dbPath: process.env.DB_PATH ?? path.resolve(process.cwd(), 'data', 'myfood.db'),
   spoonacularApiKey: process.env.SPOONACULAR_API_KEY ?? '',
-  expiryAlertDefaultDays: Number(process.env.EXPIRY_ALERT_DEFAULT_DAYS ?? 7),
-  notificationPollIntervalMs: Number(process.env.NOTIFICATION_POLL_INTERVAL_MS ?? 3_600_000),
-  notificationWithinDays: Number(
-    process.env.NOTIFICATION_WITHIN_DAYS ?? process.env.EXPIRY_ALERT_DEFAULT_DAYS ?? 7,
+  expiryAlertDefaultDays: expiryAlertDefaultDays,
+  notificationPollIntervalMs: parseNumberEnv(
+    'NOTIFICATION_POLL_INTERVAL_MS',
+    process.env.NOTIFICATION_POLL_INTERVAL_MS,
+    3_600_000,
+    { min: 1000, max: MAX_TIMER_MS },
+  ),
+  notificationWithinDays: parseNumberEnv(
+    'NOTIFICATION_WITHIN_DAYS',
+    process.env.NOTIFICATION_WITHIN_DAYS,
+    expiryAlertDefaultDays,
+    { min: 0, max: 3650 },
   ),
   jwtSecret:
     process.env.JWT_SECRET ??
     (process.env.NODE_ENV === 'test' ? 'test-secret-not-for-production' : ''),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '24h',
   logLevel: process.env.LOG_LEVEL ?? 'info',
-  rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS ?? 900_000),
-  rateLimitMax: Number(process.env.RATE_LIMIT_MAX ?? 200),
-  authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),
-  recipeRateLimitMax: Number(process.env.RECIPE_RATE_LIMIT_MAX ?? 20),
+  rateLimitWindowMs: parseNumberEnv('RATE_LIMIT_WINDOW_MS', process.env.RATE_LIMIT_WINDOW_MS, 900_000, {
+    min: 1,
+    max: MAX_TIMER_MS,
+  }),
+  rateLimitMax: parseNumberEnv('RATE_LIMIT_MAX', process.env.RATE_LIMIT_MAX, 200, { min: 1 }),
+  authRateLimitMax: parseNumberEnv('AUTH_RATE_LIMIT_MAX', process.env.AUTH_RATE_LIMIT_MAX, 10, { min: 1 }),
+  recipeRateLimitMax: parseNumberEnv('RECIPE_RATE_LIMIT_MAX', process.env.RECIPE_RATE_LIMIT_MAX, 20, { min: 1 }),
   bodyLimit: process.env.BODY_LIMIT ?? '100kb',
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
@@ -32,7 +67,7 @@ function parseTrustProxy(value: string | undefined): boolean | number {
   if (value === undefined || value === 'false') return false;
   if (value === 'true') return true;
   const numeric = Number(value);
-  if (!Number.isNaN(numeric)) return numeric;
+  if (value.trim() !== '' && Number.isFinite(numeric) && numeric >= 0) return numeric;
   // Unparseable, non-empty value (e.g. a typo) — warn rather than silently
   // falling back to `false`, since a misconfigured TRUST_PROXY behind a real
   // reverse proxy would make express-rate-limit key on the proxy's IP for

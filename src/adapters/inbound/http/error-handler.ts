@@ -12,6 +12,14 @@ function isPayloadTooLargeError(err: unknown): boolean {
   );
 }
 
+function isMalformedJsonError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { type?: unknown }).type === 'entity.parse.failed'
+  );
+}
+
 export function errorHandler(
   err: unknown,
   _req: Request,
@@ -46,6 +54,12 @@ export function errorHandler(
   // 413 rather than falling through to the generic 500 branch below.
   if (isPayloadTooLargeError(err)) {
     res.status(413).json({ error: 'Payload too large' });
+    return;
+  }
+
+  // Never log err/err.body here: body-parser attaches the raw request body.
+  if (isMalformedJsonError(err)) {
+    res.status(400).json({ error: 'Malformed JSON' });
     return;
   }
 

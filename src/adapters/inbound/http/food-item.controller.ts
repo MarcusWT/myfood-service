@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { Request, Response, NextFunction } from 'express';
 import { FoodItemServicePort } from '../../../core/ports/inbound/food-item.service.port.js';
 import {
@@ -7,6 +8,8 @@ import {
   DisposeFoodItemSchema,
 } from '../../../core/domain/food-item.js';
 import { PaginationSchema } from '../../../core/domain/pagination.js';
+
+const IdParamSchema = z.string().uuid();
 
 export class FoodItemController {
   constructor(private readonly service: FoodItemServicePort) {}
@@ -23,7 +26,8 @@ export class FoodItemController {
 
   getItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const item = await this.service.getItem(req.params.id, req.userId!);
+      const id = IdParamSchema.parse(req.params.id);
+      const item = await this.service.getItem(id, req.userId!);
       res.json(item);
     } catch (err) {
       next(err);
@@ -43,8 +47,9 @@ export class FoodItemController {
 
   updateItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const id = IdParamSchema.parse(req.params.id);
       const input = UpdateFoodItemSchema.parse(req.body);
-      const item = await this.service.updateItem(req.params.id, req.userId!, input);
+      const item = await this.service.updateItem(id, req.userId!, input);
       res.json(item);
     } catch (err) {
       next(err);
@@ -53,8 +58,9 @@ export class FoodItemController {
 
   disposeItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const id = IdParamSchema.parse(req.params.id);
       const { outcome } = DisposeFoodItemSchema.parse(req.body);
-      const item = await this.service.disposeItem(req.params.id, req.userId!, outcome);
+      const item = await this.service.disposeItem(id, req.userId!, outcome);
       res.json(item);
     } catch (err) {
       next(err);
@@ -63,7 +69,8 @@ export class FoodItemController {
 
   removeItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      await this.service.removeItem(req.params.id, req.userId!);
+      const id = IdParamSchema.parse(req.params.id);
+      await this.service.removeItem(id, req.userId!);
       res.status(204).send();
     } catch (err) {
       next(err);

@@ -3,6 +3,8 @@ import { FoodItem, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '
 import { Location } from '../../../core/domain/value-objects.js';
 import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
+import { ConflictError } from '../../../core/domain/errors.js';
+import { isUniqueViolation } from './sqlite-errors.js';
 import { runMigrations, allMigrations } from './migrations/index.js';
 
 interface FoodItemRow {
@@ -41,6 +43,11 @@ function rowToFoodItem(row: FoodItemRow): FoodItem {
   };
 }
 
+const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+const duplicateMessage = (name: string, location: string): string =>
+  `An item named '${name}' already exists in ${location}`;
+
 function buildWhereClause(
   userId: string,
   filter?: FoodItemFilter,
@@ -57,8 +64,8 @@ function buildWhereClause(
     params.category = filter.category;
   }
   if (filter?.name) {
-    conditions.push('name LIKE @name');
-    params.name = `%${filter.name}%`;
+    conditions.push("name LIKE @name ESCAPE '\\'");
+    params.name = `%${escapeLike(filter.name)}%`;
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
@@ -114,6 +121,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
   }
 
   async save(item: FoodItem): Promise<FoodItem> {
+    try {
     this.db
       .prepare(
         `INSERT INTO food_items (id, user_id, name, quantity, unit, location, category, best_before, added_at, updated_at, notes, minimum_quantity)
@@ -133,6 +141,10 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
         notes: item.notes ?? null,
         minimum_quantity: item.minimumQuantity ?? null,
       });
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new ConflictError(duplicateMessage(item.name, item.location));
+      throw err;
+    }
     return item;
   }
 
@@ -197,6 +209,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
       updatedAt: new Date(),
     };
 
+    try {
     this.db
       .prepare(
         `UPDATE food_items
@@ -218,6 +231,10 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
         notes: updated.notes ?? null,
         minimum_quantity: updated.minimumQuantity ?? null,
       });
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new ConflictError(duplicateMessage(updated.name, updated.location));
+      throw err;
+    }
 
     return updated;
   }

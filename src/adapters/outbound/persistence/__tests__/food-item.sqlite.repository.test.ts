@@ -74,8 +74,8 @@ describe('SqliteFoodItemRepository', () => {
 
     it('applies filters before paginating, reporting the filtered total', async () => {
       await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000030', location: 'FRIDGE' }));
-      await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000031', location: 'FREEZER' }));
-      await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000032', location: 'FREEZER' }));
+      await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000031', name: 'Peas', location: 'FREEZER' }));
+      await repo.save(makeItem({ id: '00000000-0000-0000-0000-000000000032', name: 'Ice', location: 'FREEZER' }));
 
       const result = await repo.findAllPaginated(USER_ID, { location: 'FREEZER' }, { page: 1, limit: 1 });
 
@@ -285,7 +285,7 @@ describe('SqliteFoodItemRepository', () => {
         const migrationRows = verifyDb
           .prepare('SELECT id FROM schema_migrations ORDER BY id ASC')
           .all() as { id: number }[];
-        expect(migrationRows.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
+        expect(migrationRows.map((r) => r.id)).toEqual([1, 2, 3, 4, 5, 6]);
 
         const existingRow = verifyDb
           .prepare('SELECT * FROM food_items WHERE id = ?')

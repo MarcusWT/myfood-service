@@ -231,3 +231,9 @@ codebase (see individual "Why" sections for the specific gaps observed).
 ### Remaining backlog
 
 The not-yet-implemented items surfaced by the audits have moved to [`frontend-implementation.md`](./frontend-implementation.md), alongside the frontend implementation plan.
+
+### Deferred dependency upgrades (from `npm audit fix` without `--force`)
+
+- Backend: `zod` 3 → 4 together with `@asteasolutions/zod-to-openapi` 7 → 9 (migrate schemas/OpenAPI registry); `vitest` 2 → 5 (clears the vite/esbuild chain); `uuid` 10 → ≥11.1.1 (advisory only affects v3/v5/v6 with a `buf` arg; `src` only uses `v4()` without `buf`, so not exploitable).
+- Web: `eslint` stays at 9 (jsx-a11y doesn't support 10) and `typescript` at 5.9 (typescript-eslint doesn't support 7); remaining `minimatch`/`undici`(jsdom) findings come from those pins and dev tooling.
+- Web: `shadcn` (with `ts-morph`/`minimatch`) is listed in `dependencies` rather than `devDependencies`; decide whether to move it so it stops showing in `npm audit --omit=dev`.
