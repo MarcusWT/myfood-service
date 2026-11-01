@@ -10,7 +10,13 @@ import { FoodItemController } from './food-item.controller.js';
 import { ExpiryAlertController } from './expiry-alert.controller.js';
 import { RecipeController } from './recipe.controller.js';
 import { ShoppingSummaryController } from './shopping-summary.controller.js';
+import { DisposalHistoryController } from './disposal-history.controller.js';
 import { AuthController } from './auth.controller.js';
+import { ShelfLifeController } from './shelf-life.controller.js';
+import { ExportController } from './export.controller.js';
+import { ShoppingListController } from './shopping-list.controller.js';
+import { SettingsController } from './settings.controller.js';
+import { FavoriteRecipeController } from './favorite-recipe.controller.js';
 import { generateOpenApiDocument } from './openapi/spec.js';
 import { AuthServicePort } from '../../../core/ports/inbound/auth.port.js';
 import { HealthCheckPort } from '../../../core/ports/outbound/health-check.port.js';
@@ -24,6 +30,12 @@ export function createApp(
   authController: AuthController,
   authService: AuthServicePort,
   healthCheckPort: HealthCheckPort,
+  disposalHistoryController: DisposalHistoryController,
+  shelfLifeController: ShelfLifeController,
+  exportController: ExportController,
+  shoppingListController: ShoppingListController,
+  settingsController: SettingsController,
+  favoriteRecipeController: FavoriteRecipeController,
 ): Application {
   const app = express();
 
@@ -71,6 +83,12 @@ export function createApp(
     shoppingSummaryController,
     authController,
     authService,
+    disposalHistoryController,
+    shelfLifeController,
+    exportController,
+    shoppingListController,
+    settingsController,
+    favoriteRecipeController,
   ));
 
   app.get('/api/docs.json', createGeneralRateLimiter(), (_req, res) => {

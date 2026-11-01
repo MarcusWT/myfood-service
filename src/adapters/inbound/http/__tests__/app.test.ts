@@ -6,7 +6,14 @@ import { FoodItemController } from '../food-item.controller.js';
 import { ExpiryAlertController } from '../expiry-alert.controller.js';
 import { RecipeController } from '../recipe.controller.js';
 import { ShoppingSummaryController } from '../shopping-summary.controller.js';
+import { DisposalHistoryController } from '../disposal-history.controller.js';
 import { AuthController } from '../auth.controller.js';
+import { ShelfLifeController } from '../shelf-life.controller.js';
+import { ExportController } from '../export.controller.js';
+import { ShoppingListController } from '../shopping-list.controller.js';
+import { SettingsController } from '../settings.controller.js';
+import { FavoriteRecipeController } from '../favorite-recipe.controller.js';
+import type { ShoppingListServicePort } from '../../../../core/ports/inbound/shopping-list.service.port.js';
 import { AuthService } from '../../../../application/auth.service.js';
 import { InMemoryUserRepository } from '../../../outbound/persistence/user.in-memory.repository.js';
 import { InMemoryHealthCheckAdapter } from '../../../outbound/persistence/health-check.in-memory.adapter.js';
@@ -104,6 +111,12 @@ describe('App (cross-cutting)', () => {
         new AuthController(authService),
         authService,
         new InMemoryHealthCheckAdapter(),
+        new DisposalHistoryController({ listHistory: vi.fn(), getWasteStats: vi.fn() }),
+        new ShelfLifeController(),
+        new ExportController({ exportFoodItems: vi.fn() }),
+        new ShoppingListController({} as ShoppingListServicePort),
+        new SettingsController({} as ConstructorParameters<typeof SettingsController>[0]),
+        new FavoriteRecipeController({} as ConstructorParameters<typeof FavoriteRecipeController>[0]),
       );
 
       const { authHeader } = await registerTestUser(app);

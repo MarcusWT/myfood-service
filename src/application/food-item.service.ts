@@ -1,6 +1,6 @@
 import { ZodError } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../core/domain/food-item.js';
+import { FoodItem, CreateFoodItemInput, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome, FoodItemSortInput, ConsumeResult, isLowStock } from '../core/domain/food-item.js';
 import { PaginatedResult, PaginationInput } from '../core/domain/pagination.js';
 import { FoodItemServicePort } from '../core/ports/inbound/food-item.service.port.js';
 import { FoodItemRepositoryPort } from '../core/ports/outbound/food-item.repository.port.js';
@@ -10,7 +10,10 @@ import { NotFoundError, ConflictError } from '../core/domain/errors.js';
 export { NotFoundError, ConflictError };
 
 export class FoodItemService implements FoodItemServicePort {
-  constructor(private readonly repository: FoodItemRepositoryPort) {}
+  constructor(
+    private readonly repository: FoodItemRepositoryPort,
+    private readonly expiringWithinDays: number = 7,
+  ) {}
 
   async addItem(userId: string, input: CreateFoodItemInput): Promise<FoodItem> {
     const existing = await this.repository.findByNameAndLocation(
@@ -51,8 +54,13 @@ export class FoodItemService implements FoodItemServicePort {
     userId: string,
     filter: FoodItemFilter,
     pagination: PaginationInput,
+    sort?: FoodItemSortInput,
   ): Promise<PaginatedResult<FoodItem>> {
-    return this.repository.findAllPaginated(userId, filter, pagination);
+    const effective =
+      filter.status && filter.expiringWithinDays === undefined
+        ? { ...filter, expiringWithinDays: this.expiringWithinDays }
+        : filter;
+    return this.repository.findAllPaginated(userId, effective, pagination, sort);
   }
 
   async updateItem(id: string, userId: string, input: UpdateFoodItemInput): Promise<FoodItem> {
@@ -96,6 +104,33 @@ export class FoodItemService implements FoodItemServicePort {
       throw new NotFoundError(`Food item with id '${id}' not found`);
     }
     return disposed;
+  }
+
+  async consumeItem(id: string, userId: string, amount: number): Promise<ConsumeResult> {
+    const item = await this.repository.consume(id, userId, amount);
+    if (!item) {
+      throw new NotFoundError(`Food item with id '${id}' not found`);
+    }
+    const disposed = item.disposition !== undefined;
+    return { item, disposed, lowStock: disposed ? false : isLowStock(item) };
+  }
+
+  async restoreItem(id: string, userId: string): Promise<FoodItem> {
+    const disposed = await this.repository.findDisposedById(id, userId);
+    if (!disposed) {
+      throw new NotFoundError(`Disposed food item with id '${id}' not found`);
+    }
+    const duplicate = await this.repository.findByNameAndLocation(userId, disposed.name, disposed.location);
+    if (duplicate) {
+      throw new ConflictError(
+        `Cannot restore: an active item named '${disposed.name}' already exists in ${disposed.location}`,
+      );
+    }
+    const restored = await this.repository.restore(id, userId);
+    if (!restored) {
+      throw new NotFoundError(`Disposed food item with id '${id}' not found`);
+    }
+    return restored;
   }
 
   async removeItem(id: string, userId: string): Promise<void> {

@@ -8,25 +8,26 @@ export class SqliteNotificationLogRepository implements NotificationLogPort {
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
+    this.db.pragma('busy_timeout = 5000');
     this.db.pragma('journal_mode = WAL');
     runMigrations(this.db, allMigrations);
   }
 
-  async filterUnsent(userId: string, alerts: ExpiryAlert[], day: string): Promise<ExpiryAlert[]> {
+  async filterUnsent(userId: string, alerts: ExpiryAlert[], day: string, channel = ''): Promise<ExpiryAlert[]> {
     const stmt = this.db.prepare(
-      'SELECT 1 FROM notifications_sent WHERE user_id = ? AND item_id = ? AND status = ? AND day = ?',
+      'SELECT 1 FROM notifications_sent WHERE user_id = ? AND item_id = ? AND status = ? AND day = ? AND channel = ?',
     );
-    return alerts.filter((a) => !stmt.get(userId, a.item.id, a.status, day));
+    return alerts.filter((a) => !stmt.get(userId, a.item.id, a.status, day, channel));
   }
 
-  async markSent(userId: string, alerts: ExpiryAlert[], day: string): Promise<void> {
+  async markSent(userId: string, alerts: ExpiryAlert[], day: string, channel = ''): Promise<void> {
     const stmt = this.db.prepare(
-      `INSERT OR IGNORE INTO notifications_sent (user_id, item_id, status, day, sent_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO notifications_sent (user_id, item_id, status, day, sent_at, channel)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     );
     const sentAt = new Date().toISOString();
     this.db.transaction(() => {
-      for (const a of alerts) stmt.run(userId, a.item.id, a.status, day, sentAt);
+      for (const a of alerts) stmt.run(userId, a.item.id, a.status, day, sentAt, channel);
     })();
   }
 

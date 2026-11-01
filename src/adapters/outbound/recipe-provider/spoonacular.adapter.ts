@@ -1,4 +1,4 @@
-import { Recipe, RecipeIngredient } from '../../../core/domain/recipe.js';
+import { Recipe, RecipeIngredient, RecipeSearchOptions } from '../../../core/domain/recipe.js';
 import { RecipeProviderPort } from '../../../core/ports/outbound/recipe-provider.port.js';
 import { TtlCache } from './ttl-cache.js';
 import { logger } from '../../../logger.js';
@@ -17,6 +17,18 @@ interface SpoonacularRecipeResult {
   missedIngredientCount: number;
   usedIngredients: SpoonacularIngredient[];
   missedIngredients: SpoonacularIngredient[];
+}
+
+interface SpoonacularComplexResult {
+  id: number;
+  title: string;
+  image?: string;
+  readyInMinutes?: number;
+  servings?: number;
+  usedIngredientCount?: number;
+  missedIngredientCount?: number;
+  usedIngredients?: SpoonacularIngredient[];
+  missedIngredients?: SpoonacularIngredient[];
 }
 
 interface SpoonacularRecipeInformation {
@@ -44,6 +56,7 @@ const DEFAULT_SEARCH_TIMEOUT_MS = 8000;
 const DEFAULT_SEARCH_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_INFO_CACHE_MAX = 1000;
 const DEFAULT_SEARCH_CACHE_MAX = 500;
+const MAX_COMPLEX_INGREDIENTS = 3; // complexSearch ANDs includeIngredients; keep it loose
 const CIRCUIT_BREAKER_FAILURE_THRESHOLD = 3;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 60 * 1000;
 
@@ -74,30 +87,62 @@ export class SpoonacularRecipeAdapter implements RecipeProviderPort {
     this.searchCache = new TtlCache(options.searchCacheMaxEntries ?? DEFAULT_SEARCH_CACHE_MAX);
   }
 
-  async findByIngredients(ingredients: string[], limit: number = 5): Promise<Recipe[]> {
-    const normalized = [
-      ...new Set(ingredients.map((i) => i.trim().toLowerCase()).filter(Boolean)),
+  async findByIngredients(
+    ingredients: string[],
+    limit: number = 5,
+    options: RecipeSearchOptions = {},
+  ): Promise<Recipe[]> {
+    // Input order is preserved (the service sorts by urgency) so that
+    // complexSearch can take the most urgent few.
+    const ordered = [...new Set(ingredients.map((i) => i.trim().toLowerCase()).filter(Boolean))];
+    const diet = options.diet?.trim() || undefined;
+    const intolerances = [
+      ...new Set((options.intolerances ?? []).map((i) => i.trim().toLowerCase()).filter(Boolean)),
     ].sort();
-    const key = `${normalized.join(',')}|${limit}`;
+    const useComplex = diet !== undefined || intolerances.length > 0;
+    const normalized = useComplex
+      ? ordered.slice(0, MAX_COMPLEX_INGREDIENTS)
+      : [...ordered].sort();
+    const key = `${[...normalized].sort().join(',')}|${limit}|d=${diet ?? ''}|i=${intolerances.join(',')}`;
 
     const cached = this.searchCache.get(key);
     if (cached) return structuredClone(cached);
 
     let pending = this.inFlight.get(key);
     if (!pending) {
-      pending = this.search(normalized, limit, key).finally(() => this.inFlight.delete(key));
+      pending = this.search(normalized, limit, key, diet, intolerances, useComplex).finally(() => this.inFlight.delete(key));
       this.inFlight.set(key, pending);
     }
     return structuredClone(await pending);
   }
 
-  private async search(ingredients: string[], limit: number, key: string): Promise<Recipe[]> {
+  private async search(
+    ingredients: string[],
+    limit: number,
+    key: string,
+    diet: string | undefined,
+    intolerances: string[],
+    useComplex: boolean,
+  ): Promise<Recipe[]> {
     const ingredientList = ingredients.join(',');
-    const url = new URL(`${this.baseUrl}/recipes/findByIngredients`);
-    url.searchParams.set('ingredients', ingredientList);
-    url.searchParams.set('number', String(limit));
-    url.searchParams.set('ranking', '1'); // maximise used ingredients
-    url.searchParams.set('ignorePantry', 'false');
+    const url = new URL(
+      `${this.baseUrl}/recipes/${useComplex ? 'complexSearch' : 'findByIngredients'}`,
+    );
+    if (useComplex) {
+      // complexSearch is the only endpoint that can filter by diet/intolerances.
+      url.searchParams.set('includeIngredients', ingredientList);
+      if (diet) url.searchParams.set('diet', diet);
+      if (intolerances.length > 0) url.searchParams.set('intolerances', intolerances.join(','));
+      url.searchParams.set('sort', 'min-missing-ingredients');
+      url.searchParams.set('fillIngredients', 'true');
+      url.searchParams.set('addRecipeInformation', 'true');
+      url.searchParams.set('number', String(limit));
+    } else {
+      url.searchParams.set('ingredients', ingredientList);
+      url.searchParams.set('number', String(limit));
+      url.searchParams.set('ranking', '1'); // maximise used ingredients
+      url.searchParams.set('ignorePantry', 'false');
+    }
 
     let results: SpoonacularRecipeResult[];
     try {
@@ -112,7 +157,12 @@ export class SpoonacularRecipeAdapter implements RecipeProviderPort {
         );
       }
 
-      results = (await response.json()) as SpoonacularRecipeResult[];
+      const json = await response.json();
+      results = useComplex
+        ? ((json as { results?: SpoonacularComplexResult[] }).results ?? []).map(
+            (r) => r as unknown as SpoonacularRecipeResult,
+          )
+        : (json as SpoonacularRecipeResult[]);
     } catch (error) {
       // Deliberately no `cause`: underlying errors may embed the request URL.
       /* eslint-disable preserve-caught-error */
@@ -127,25 +177,13 @@ export class SpoonacularRecipeAdapter implements RecipeProviderPort {
       /* eslint-enable preserve-caught-error */
     }
 
-    const recipes = results.map((r) => {
-      const totalIngredients = r.usedIngredientCount + r.missedIngredientCount;
-      const matchScore =
-        totalIngredients > 0
-          ? Math.round((r.usedIngredientCount / totalIngredients) * 100)
-          : 0;
+    const recipes = results.map((r) => toRecipe(r));
 
-      return {
-        id: r.id,
-        title: r.title,
-        imageUrl: r.image,
-        sourceUrl: `https://spoonacular.com/recipes/${r.title.toLowerCase().replace(/\s+/g, '-')}-${r.id}`,
-        readyInMinutes: 0, // enriched below when possible
-        servings: 0,
-        usedIngredients: r.usedIngredients.map(toRecipeIngredient),
-        missedIngredients: r.missedIngredients.map(toRecipeIngredient),
-        matchScore,
-      };
-    });
+    if (useComplex) {
+      // complexSearch already returned readyInMinutes/servings; skip enrichment.
+      this.searchCache.set(key, structuredClone(recipes), this.searchTtlMs);
+      return recipes;
+    }
 
     const allEnriched = await this.enrichAll(recipes);
 
@@ -224,6 +262,24 @@ export class SpoonacularRecipeAdapter implements RecipeProviderPort {
       );
     }
   }
+}
+
+function toRecipe(r: SpoonacularRecipeResult & Partial<SpoonacularComplexResult>): Recipe {
+  const used = r.usedIngredients ?? [];
+  const missed = r.missedIngredients ?? [];
+  const usedCount = r.usedIngredientCount ?? used.length;
+  const total = usedCount + (r.missedIngredientCount ?? missed.length);
+  return {
+    id: r.id,
+    title: r.title,
+    imageUrl: r.image,
+    sourceUrl: `https://spoonacular.com/recipes/${r.title.toLowerCase().replace(/\s+/g, '-')}-${r.id}`,
+    readyInMinutes: r.readyInMinutes ?? 0, // findByIngredients results are enriched later
+    servings: r.servings ?? 0,
+    usedIngredients: used.map(toRecipeIngredient),
+    missedIngredients: missed.map(toRecipeIngredient),
+    matchScore: total > 0 ? Math.round((usedCount / total) * 100) : 0,
+  };
 }
 
 function toRecipeIngredient(i: SpoonacularIngredient): RecipeIngredient {

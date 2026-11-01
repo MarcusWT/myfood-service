@@ -218,30 +218,48 @@ Suggested order: quick wins first, then layout, then skeletons, then inventory, 
 
 ---
 
-## Tier 4: Backend product features
+## Tier 4: Backend product features — items 27-32 DONE
 
-### 27. Disposal history and waste statistics (M, High value)
+### Status: items 27-32 done (planned, implemented in 3 groups, reviewed, fixed, re-reviewed, HIGH fixed; web UI for these is not built)
+- Final state: root typecheck/lint/build clean, 584 backend tests pass (581 at the last full tester run; +3 from the final fix, which was re-run by the fix agent only); web typecheck/lint/build and 146 tests pass; e2e 6/6 and web `format:check` (only the 2 known pre-existing failures) were run before the final fix and not re-run after it. Coverage 98.0% statements / 91.9% branches (before the final fix). Runtime smoke test (before the final fix): migrations 12 rows and idempotent on restart, consume rounding, date-only bounds, shopping cap (500 then 422, import at cap creates nothing), webhook retried while failing then delivered once, console notified once, SIGTERM exit 0. `web/src/api/schema.d.ts` regenerated from a built server.
+- Not re-run after the final HIGH fix: e2e, runtime smoke, coverage. Not run at all: upgrade from a DB at migration 011 only, real Spoonacular calls, non-Chromium browsers.
+- Key decisions:
+  - 28: `sort`/`order` (whitelist: bestBefore, name, addedAt, quantity; `id` tiebreak), `lowStock`, `expiringBefore`, `status`, `totalPages` (0 when empty). List `status=expiring` uses the global `EXPIRY_ALERT_DEFAULT_DAYS`, not the user's `alertWithinDays`. Shared `expiryThreshold()` (UTC 24h multiples). Date-only `to`/`expiringBefore` = end of UTC day; datetimes need a timezone, `+` must be encoded as `%2B`.
+  - 27: `GET /food-items/history`, `GET /stats/waste` (counts items, UTC byMonth, wasteRate 4 dp, default last 90 days), `POST /food-items/:id/restore` (409 on active duplicate), `DisposedPurgeJob` (`DISPOSED_RETENTION_DAYS` 365, 0 disables; `DISPOSED_PURGE_INTERVAL_MS`), migration 008. Retention bounds how far back stats can look.
+  - 29: `POST /food-items/:id/consume {amount}`, atomic single UPDATE; amount >= quantity (or a remainder rounding to 0) disposes CONSUMED; response `{item, disposed, lowStock}`; partial consumes produce no history/stats.
+  - 30: webhook (HMAC-SHA256 over `ts.body`) + composite + console, selected by `NOTIFICATION_CHANNELS`; `notify(recipient, alerts)`. Per-channel dedupe via migration 012 so a failing channel doesn't re-notify the others. SMTP email deferred.
+  - 31: `GET|PUT /settings` (migration 009), favourites (migration 011), diet/intolerances use Spoonacular `complexSearch` (max 3 most urgent ingredients) with deliberately NO fallback to unfiltered search (allergy safety; empty means nothing matched). Recipes re-ranked by soon-expiring items. `settings.channel` is stored but not honoured yet.
+  - 32: shelf-life suggestions (static table, advisory), CSV/JSON export (formula-injection guard, BOM), persisted shopping list (migration 010, cap 500, atomic create/import).
+- Deploy notes: migrations 008-012 run automatically (012 recreates `notifications_sent`; `busy_timeout=5000` now set on all SQLite connections). New env vars: `DISPOSED_RETENTION_DAYS`, `DISPOSED_PURGE_INTERVAL_MS`, `NOTIFICATION_CHANNELS`, `NOTIFICATION_WEBHOOK_URL`/`_SECRET`/`_TIMEOUT_MS`. `NOTIFICATION_WITHIN_DAYS` is now only a fallback behind per-user `alertWithinDays`. Purge hard-deletes disposed rows past retention. Stricter date query parsing may reject loose formats that were previously accepted. `NotificationPort.notify` signature changed (custom adapters must update).
+
+### Follow-ups from review (not yet done)
+- Web: no UI yet for sort/filters (item 24 deferrals now unblocked), history/waste stats, restore, partial consume, settings, favourites, shopping list, export, shelf-life prefill.
+- MEDIUM: `settings.channel` not honoured by the poller; `findByIngredients`-style result quality for complexSearch with few ingredients is unverified against the real API; favourites cap check is not atomic.
+- LOW: `expiringSoon` matching is substring-based ("egg" matches "eggplant"); shopping-list update cannot clear `quantity`/`unit`; JSON export includes `userId`; export built fully in memory; shopping import dedupes by name only; name sort differs on non-ASCII names (SQLite NOCASE vs JS lowercase); history rows keep original quantity (consumed amount not recorded); `sort`/`order` defaults may be missing from OpenAPI; missing tests for SQLite restore 409 on a real unique violation and for purge racing `stop()`; a one-off 401 flake in `food-item.controller.test.ts` was seen once and did not reproduce in 3 runs; verify `schema.d.ts` has no diff after regeneration at deploy time.
+- Housekeeping: scratch dirs `.../T/opencode/t` and `.../T/opencode/final` could not be deleted by agents (outside the repo; remove manually); `.opencode/` is untracked and probably should be gitignored.
+
+### 27. Disposal history and waste statistics (M, High value) — DONE
 - Source: BE F1.
 - Disposal data is captured (migration 005) but never readable. Add `GET /food-items/history` and `GET /stats/waste`.
 - Include restore of a disposed item (F2, S) and a retention purge job for old disposed rows (F10, S).
 
-### 28. List endpoint filters, sort and pagination metadata (M)
+### 28. List endpoint filters, sort and pagination metadata (M) — DONE
 - Source: BE 21.
 - Add `sort`/`order`, `lowStock`, `expiringBefore` and `status` parameters, plus `totalPages`. Confirm that `PaginationSchema` caps `limit`. This unblocks item 24.
 
-### 29. Partial consumption endpoint (S)
+### 29. Partial consumption endpoint (S) — DONE
 - Source: BE F4.
 - `POST /food-items/:id/consume {amount}` decrements quantity and triggers low-stock handling.
 
-### 30. Real notification channels (M)
+### 30. Real notification channels (M) — DONE
 - Source: BE F6.
 - Email or webhook `NotificationPort` adapters. Depends on item 8's dedupe log.
 
-### 31. Per-user settings and recipe preferences (M)
+### 31. Per-user settings and recipe preferences (M) — DONE
 - Sources: BE F5, F7.
 - A `user_settings` table (alert window, diet and intolerances, channel). Also prioritise expiring items in recipes and add a favourites list.
 
-### 32. Smaller product ideas (S to M each)
+### 32. Smaller product ideas (S to M each) — DONE
 - Source: BE F3, F8, F9.
 - A persisted shopping list, CSV/JSON export, and category-based shelf-life suggestions.
 

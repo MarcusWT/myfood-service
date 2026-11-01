@@ -14,4 +14,12 @@ export interface Recipe {
   usedIngredients: RecipeIngredient[];
   missedIngredients: RecipeIngredient[];
   matchScore: number; // percentage of available ingredients used
+  isFavorite?: boolean;
+  /** Used ingredients that are among the user's soonest-expiring items. */
+  expiringSoon?: string[];
+}
+
+export interface RecipeSearchOptions {
+  diet?: string;
+  intolerances?: string[];
 }

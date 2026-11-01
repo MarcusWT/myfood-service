@@ -38,6 +38,24 @@ export const StrictIsoDateSchema = z
     return date;
   });
 
+/**
+ * Strict ISO date for range filters. A date-only value is start of that UTC
+ * day, or its end (23:59:59.999Z) when `endOfDay` is set (upper bounds).
+ */
+export function dateBoundSchema(endOfDay: boolean) {
+  return z.string().transform((value, ctx) => {
+    const date = parseStrictIsoDate(value);
+    if (!date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'must be an ISO 8601 date (YYYY-MM-DD) or datetime with timezone',
+      });
+      return z.NEVER;
+    }
+    return endOfDay && DATE_ONLY_RE.test(value) ? new Date(date.getTime() + 86_400_000 - 1) : date;
+  });
+}
+
 export const DisposalOutcomeSchema = z.enum(['CONSUMED', 'DISCARDED']);
 export type DisposalOutcome = z.infer<typeof DisposalOutcomeSchema>;
 
@@ -110,18 +128,94 @@ export function applyUpdate(existing: FoodItem, input: UpdateFoodItemInput, now:
   return updated;
 }
 
+export const FOOD_ITEM_SORT_FIELDS = ['bestBefore', 'name', 'addedAt', 'quantity'] as const;
+export const FoodItemSortSchema = z.enum(FOOD_ITEM_SORT_FIELDS);
+export type FoodItemSortField = z.infer<typeof FoodItemSortSchema>;
+export const SortOrderSchema = z.enum(['asc', 'desc']);
+export type SortOrder = z.infer<typeof SortOrderSchema>;
+export const FoodItemStatusSchema = z.enum(['expired', 'expiring', 'fresh']);
+export type FoodItemStatus = z.infer<typeof FoodItemStatusSchema>;
+
 export const FoodItemFilterSchema = z.object({
   location: LocationSchema.optional(),
   category: CategorySchema.optional(),
   name: z.string().trim().max(200).optional(),
+  lowStock: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  expiringBefore: dateBoundSchema(true).optional(),
+  status: FoodItemStatusSchema.optional(),
 });
-export type FoodItemFilter = z.infer<typeof FoodItemFilterSchema>;
+export type FoodItemFilter = z.infer<typeof FoodItemFilterSchema> & {
+  /** Internal (not parsed from the query): reference time for `status`. Defaults to now. */
+  now?: Date;
+  /** Internal (not parsed from the query): window for `status=expiring|fresh`. */
+  expiringWithinDays?: number;
+};
+
+export const FoodItemListQuerySchema = z.object({
+  sort: FoodItemSortSchema.default('bestBefore'),
+  order: SortOrderSchema.default('asc'),
+});
+export type FoodItemSortInput = z.infer<typeof FoodItemListQuerySchema>;
+
+export const DEFAULT_FOOD_ITEM_SORT: FoodItemSortInput = { sort: 'bestBefore', order: 'asc' };
+
+export const ConsumeFoodItemSchema = z
+  .object({ amount: z.number().positive().max(MAX_QUANTITY) })
+  .strict();
+export type ConsumeFoodItemInput = z.infer<typeof ConsumeFoodItemSchema>;
+
+export interface ConsumeResult {
+  item: FoodItem;
+  disposed: boolean;
+  lowStock: boolean;
+}
+
+/** Rounds to 6 decimals to avoid float noise after subtraction (e.g. 0.3 - 0.1). */
+export function roundQuantity(n: number): number {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+/**
+ * Shared comparator for list sorting (in-memory repo); mirrors the SQLite
+ * `ORDER BY <col> <dir>, id ASC` with NOCASE name collation.
+ */
+export function compareFoodItems(a: FoodItem, b: FoodItem, sort: FoodItemSortInput): number {
+  let cmp = 0;
+  switch (sort.sort) {
+    case 'bestBefore':
+      cmp = a.bestBefore.getTime() - b.bestBefore.getTime();
+      break;
+    case 'addedAt':
+      cmp = a.addedAt.getTime() - b.addedAt.getTime();
+      break;
+    case 'quantity':
+      cmp = a.quantity - b.quantity;
+      break;
+    case 'name': {
+      const x = a.name.toLowerCase();
+      const y = b.name.toLowerCase();
+      cmp = x < y ? -1 : x > y ? 1 : 0;
+      break;
+    }
+  }
+  if (sort.order === 'desc') cmp = -cmp;
+  if (cmp !== 0) return cmp;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
 
 /**
  * Determines if a food item is expired relative to the given date.
  */
 export function isExpired(item: FoodItem, now: Date = new Date()): boolean {
   return item.bestBefore < now;
+}
+
+/** End of the "expiring" window: `now` plus `days` of 24h (UTC arithmetic, DST-independent). */
+export function expiryThreshold(now: Date, days: number): Date {
+  return new Date(now.getTime() + days * 86_400_000);
 }
 
 /**
@@ -132,8 +226,7 @@ export function isExpiringSoon(
   withinDays: number,
   now: Date = new Date(),
 ): boolean {
-  const threshold = new Date(now);
-  threshold.setDate(threshold.getDate() + withinDays);
+  const threshold = expiryThreshold(now, withinDays);
   return item.bestBefore <= threshold && item.bestBefore >= now;
 }
 

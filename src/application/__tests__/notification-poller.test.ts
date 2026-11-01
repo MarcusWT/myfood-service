@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NotificationPoller } from '../notification-poller.js';
+import { ExpiryAlertService } from '../expiry-alert.service.js';
 import { logger } from '../../logger.js';
 import type { ExpiryAlertServicePort } from '../../core/ports/inbound/expiry-alert.service.port.js';
 import type { NotificationPort } from '../../core/ports/outbound/notification.port.js';
@@ -23,6 +24,8 @@ describe('NotificationPoller', () => {
     passwordHash: 'hash',
     createdAt: new Date(),
   };
+
+  const recipient = { userId: user.id, email: user.email };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -55,7 +58,7 @@ describe('NotificationPoller', () => {
 
       await poller.poll();
 
-      expect(expiryAlertService.getAlerts).toHaveBeenCalledWith(user.id, 5);
+      expect(expiryAlertService.getAlerts).toHaveBeenCalledWith(user.id, undefined, { fallbackDays: 5 });
       expect(notificationPort.notify).not.toHaveBeenCalled();
     });
 
@@ -75,7 +78,7 @@ describe('NotificationPoller', () => {
 
       await poller.poll();
 
-      expect(notificationPort.notify).toHaveBeenCalledWith(nonEmptyAlerts);
+      expect(notificationPort.notify).toHaveBeenCalledWith(recipient, nonEmptyAlerts);
     });
 
     it('logs and swallows errors from the expiry alert service', async () => {
@@ -122,9 +125,9 @@ describe('NotificationPoller', () => {
 
       await poller.poll();
 
-      expect(expiryAlertService.getAlerts).toHaveBeenCalledWith(user.id, 5);
-      expect(expiryAlertService.getAlerts).toHaveBeenCalledWith(user2.id, 5);
-      expect(notificationPort.notify).toHaveBeenCalledWith(user2Alerts);
+      expect(expiryAlertService.getAlerts).toHaveBeenCalledWith(user.id, undefined, { fallbackDays: 5 });
+      expect(expiryAlertService.getAlerts).toHaveBeenCalledWith(user2.id, undefined, { fallbackDays: 5 });
+      expect(notificationPort.notify).toHaveBeenCalledWith({ userId: user2.id, email: user2.email }, user2Alerts);
       expect(errorSpy).toHaveBeenCalled();
     });
 
@@ -254,7 +257,7 @@ describe('NotificationPoller', () => {
       await poller.poll();
       setAlerts([mk('a'), mk('b')]);
       await poller.poll();
-      expect(notificationPort.notify).toHaveBeenLastCalledWith([expect.objectContaining({ item: { id: 'b' } })]);
+      expect(notificationPort.notify).toHaveBeenLastCalledWith(recipient, [expect.objectContaining({ item: { id: 'b' } })]);
     });
 
     it('prunes old log entries', async () => {
@@ -324,6 +327,23 @@ describe('NotificationPoller', () => {
       (notificationPort.notify as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('x'));
       await mkPoller().poll();
       expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('passes the notify recipient and lets per-user alert windows apply', async () => {
+      const svc = new ExpiryAlertService(
+        {
+          findAll: vi.fn().mockResolvedValue([
+            { id: 'near', name: 'a', bestBefore: new Date(Date.now() + 1 * 86_400_000) },
+            { id: 'far', name: 'b', bestBefore: new Date(Date.now() + 5 * 86_400_000) },
+          ]),
+        } as never,
+        { settings: { get: vi.fn().mockResolvedValue({ alertWithinDays: 2 }), upsert: vi.fn() } as never },
+      );
+      const poller = new NotificationPoller(svc, notificationPort, userRepository, log, 1000, 10);
+      await poller.poll();
+      const [rec, sent] = (notificationPort.notify as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(rec).toEqual(recipient);
+      expect(sent).toHaveLength(1);
     });
 
     it('survives markSent throwing', async () => {

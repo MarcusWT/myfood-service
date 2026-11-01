@@ -173,12 +173,12 @@ describe('FoodItemService', () => {
 
   describe('listItemsPaginated', () => {
     it('delegates to the repository and returns its result', async () => {
-      const expected = { data: [makeItem()], total: 1, page: 1, limit: 20 };
+      const expected = { data: [makeItem()], total: 1, page: 1, limit: 20, totalPages: 1 };
       vi.mocked(repo.findAllPaginated).mockResolvedValue(expected);
 
       const result = await service.listItemsPaginated(USER_ID, {}, { page: 1, limit: 20 });
 
-      expect(repo.findAllPaginated).toHaveBeenCalledWith(USER_ID, {}, { page: 1, limit: 20 });
+      expect(repo.findAllPaginated).toHaveBeenCalledWith(USER_ID, {}, { page: 1, limit: 20 }, undefined);
       expect(result).toEqual(expected);
     });
   });

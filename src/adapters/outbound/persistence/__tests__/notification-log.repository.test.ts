@@ -70,3 +70,27 @@ describe('SqliteNotificationLogRepository persistence & migration 007', () => {
     expect(db.prepare('SELECT count(*) c FROM notifications_sent').get()).toEqual({ c: 0 });
   });
 });
+
+describe('SQLite busy_timeout / multiple connections', () => {
+  it('opens several repositories on the same file (sequential and concurrent) without SQLITE_BUSY', async () => {
+    const file = tmpDb();
+    const first = new SqliteNotificationLogRepository(file);
+    await first.markSent('u', [mk('a')], '2026-11-01', 'c');
+    const second = new SqliteNotificationLogRepository(file);
+    const opened = await Promise.all(
+      Array.from({ length: 4 }, async () => new SqliteNotificationLogRepository(file)),
+    );
+    expect(await second.filterUnsent('u', [mk('a')], '2026-11-01', 'c')).toHaveLength(0);
+    const probe = new Database(file);
+    probe.pragma('busy_timeout = 5000');
+    probe.close();
+    for (const r of [first, second, ...opened]) r.close();
+  });
+
+  it('sets busy_timeout on the connection', () => {
+    const repo = new SqliteNotificationLogRepository(tmpDb());
+    const db = (repo as unknown as { db: Database.Database }).db;
+    expect(db.pragma('busy_timeout', { simple: true })).toBe(5000);
+    repo.close();
+  });
+});

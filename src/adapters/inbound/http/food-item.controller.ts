@@ -6,6 +6,8 @@ import {
   UpdateFoodItemSchema,
   FoodItemFilterSchema,
   DisposeFoodItemSchema,
+  ConsumeFoodItemSchema,
+  FoodItemListQuerySchema,
 } from '../../../core/domain/food-item.js';
 import { PaginationSchema } from '../../../core/domain/pagination.js';
 
@@ -38,7 +40,8 @@ export class FoodItemController {
     try {
       const filter = FoodItemFilterSchema.parse(req.query);
       const pagination = PaginationSchema.parse(req.query);
-      const result = await this.service.listItemsPaginated(req.userId!, filter, pagination);
+      const sort = FoodItemListQuerySchema.parse(req.query);
+      const result = await this.service.listItemsPaginated(req.userId!, filter, pagination, sort);
       res.json(result);
     } catch (err) {
       next(err);
@@ -61,6 +64,27 @@ export class FoodItemController {
       const id = IdParamSchema.parse(req.params.id);
       const { outcome } = DisposeFoodItemSchema.parse(req.body);
       const item = await this.service.disposeItem(id, req.userId!, outcome);
+      res.json(item);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  consumeItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = IdParamSchema.parse(req.params.id);
+      const { amount } = ConsumeFoodItemSchema.parse(req.body);
+      const result = await this.service.consumeItem(id, req.userId!, amount);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  restoreItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = IdParamSchema.parse(req.params.id);
+      const item = await this.service.restoreItem(id, req.userId!);
       res.json(item);
     } catch (err) {
       next(err);

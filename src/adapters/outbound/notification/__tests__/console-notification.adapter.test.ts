@@ -24,6 +24,8 @@ const makeAlert = (overrides?: Partial<ExpiryAlert>): ExpiryAlert => ({
   ...overrides,
 });
 
+const recipient = { userId: 'u1', email: 'u@example.com' };
+
 describe('ConsoleNotificationAdapter', () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
@@ -38,7 +40,7 @@ describe('ConsoleNotificationAdapter', () => {
   it('does nothing when there are no alerts', async () => {
     const adapter = new ConsoleNotificationAdapter();
 
-    await adapter.notify([]);
+    await adapter.notify(recipient, []);
 
     expect(logSpy).not.toHaveBeenCalled();
   });
@@ -50,7 +52,7 @@ describe('ConsoleNotificationAdapter', () => {
       makeAlert({ item: makeItem({ name: 'Milk' }), status: 'EXPIRED', daysUntilExpiry: -2 }),
     ];
 
-    await adapter.notify(alerts);
+    await adapter.notify(recipient, alerts);
 
     expect(logSpy).toHaveBeenCalledTimes(2);
     expect(logSpy).toHaveBeenNthCalledWith(

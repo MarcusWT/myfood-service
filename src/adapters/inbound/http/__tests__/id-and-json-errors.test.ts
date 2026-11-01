@@ -32,6 +32,8 @@ describe('malformed JSON and id params', () => {
     ['get', '/api/v1/food-items/garbage'],
     ['patch', '/api/v1/food-items/garbage'],
     ['post', '/api/v1/food-items/garbage/dispose'],
+    ['post', '/api/v1/food-items/garbage/consume'],
+    ['post', '/api/v1/food-items/garbage/restore'],
     ['delete', '/api/v1/food-items/garbage'],
   ] as const)('%s %s -> 400', async (method, url) => {
     const res = await request(app)[method](url)

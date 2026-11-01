@@ -1,5 +1,5 @@
 import { ExpiryAlert } from '../../../core/domain/expiry-alert.js';
-import { NotificationPort } from '../../../core/ports/outbound/notification.port.js';
+import { NotificationPort, NotificationRecipient } from '../../../core/ports/outbound/notification.port.js';
 import { logger } from '../../../logger.js';
 
 /**
@@ -8,12 +8,17 @@ import { logger } from '../../../logger.js';
  * without any changes to the application layer.
  */
 export class ConsoleNotificationAdapter implements NotificationPort {
-  async notify(alerts: ExpiryAlert[]): Promise<void> {
+  async notify(recipient: NotificationRecipient, alerts: ExpiryAlert[]): Promise<void> {
     if (alerts.length === 0) return;
 
     for (const alert of alerts) {
       logger.info(
-        { status: alert.status, item: alert.item.name, daysUntilExpiry: alert.daysUntilExpiry },
+        {
+          userId: recipient.userId,
+          status: alert.status,
+          item: alert.item.name,
+          daysUntilExpiry: alert.daysUntilExpiry,
+        },
         `[Alert] ${alert.status}: "${alert.item.name}" — ${alert.daysUntilExpiry} day(s) until expiry`,
       );
     }

@@ -307,11 +307,16 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    location?: string;
-                    category?: string;
+                    location?: "FRIDGE" | "FREEZER" | "PANTRY";
+                    category?: "DAIRY" | "MEAT" | "SEAFOOD" | "VEGETABLES" | "FRUITS" | "GRAINS" | "CONDIMENTS" | "BEVERAGES" | "SNACKS" | "FROZEN" | "OTHER";
                     name?: string;
-                    page?: number | null;
-                    limit?: number | null;
+                    sort?: "bestBefore" | "name" | "addedAt" | "quantity";
+                    order?: "asc" | "desc";
+                    lowStock?: "true" | "false";
+                    expiringBefore?: string;
+                    status?: "expired" | "expiring" | "fresh";
+                    page?: number;
+                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -436,6 +441,147 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/food-items/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Disposal history (consumed/discarded items, newest first)
+         * @description Items kept after disposal, sorted by disposedAt descending. Disposed rows older than DISPOSED_RETENTION_DAYS are purged.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    outcome?: "CONSUMED" | "DISCARDED";
+                    from?: string;
+                    to?: string;
+                    page?: number;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Paginated disposed items */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PaginatedFoodItems"];
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/waste": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Waste statistics from disposal history
+         * @description Counts items (not quantities). Defaults to the last 90 days. Limited by DISPOSED_RETENTION_DAYS.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    from?: string;
+                    to?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Waste statistics */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WasteStats"];
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -726,6 +872,172 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/food-items/{id}/consume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume part of a food item
+         * @description Atomically decrements quantity. If amount >= quantity the item is disposed as CONSUMED (disposed: true). Unlike /dispose, the response is {item, disposed, lowStock}, not a bare item. Partial consumes create no history/stats; only the final full consume counts.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        amount: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Quantity decremented or item disposed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConsumeResult"];
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Resource not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotFoundError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/food-items/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore a disposed food item to the active list */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Food item restored */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FoodItem"];
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Resource not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotFoundError"];
+                    };
+                };
+                /** @description Conflicting resource */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConflictError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/alerts/expiry": {
         parameters: {
             query?: never;
@@ -856,6 +1168,287 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the effective user settings (defaults when none saved) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Settings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserSettings"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        /** Replace the user settings (full replace, idempotent) */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UserSettings"];
+                };
+            };
+            responses: {
+                /** @description Saved settings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserSettings"];
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recipes/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List favourite recipes (newest first) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Favourites */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FavoriteRecipe"][];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recipes/favorites/{recipeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Add a favourite recipe (idempotent upsert) */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    recipeId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        title: string;
+                        /** Format: uri */
+                        imageUrl?: string;
+                        /** Format: uri */
+                        sourceUrl?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Saved favourite */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FavoriteRecipe"];
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Remove a favourite recipe (idempotent) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    recipeId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed (or not present) */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shopping/summary": {
         parameters: {
             query?: never;
@@ -910,6 +1503,589 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/food-items/shelf-life": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Suggest a best-before date for a category and location (advisory) */
+        get: {
+            parameters: {
+                query: {
+                    category: "DAIRY" | "MEAT" | "SEAFOOD" | "VEGETABLES" | "FRUITS" | "GRAINS" | "CONDIMENTS" | "BEVERAGES" | "SNACKS" | "FROZEN" | "OTHER";
+                    location: "FRIDGE" | "FREEZER" | "PANTRY";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Suggestion; days and suggestedBestBefore are null when not recommended */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            category: string;
+                            location: string;
+                            days: number | null;
+                            suggestedBestBefore: string | null;
+                            /** @enum {string} */
+                            source: "default-table";
+                        };
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/food-items/shelf-life/table": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Full default shelf-life table (days per category and location) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Shelf-life table */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {string} */
+                            source: "default-table";
+                            table: {
+                                [key: string]: {
+                                    [key: string]: number | null;
+                                };
+                            };
+                        };
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/food-items/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export all active food items as JSON (lossless) or CSV (formula-guarded)
+         * @description CSV cells starting with =, +, -, @, tab or CR are prefixed with a single quote to prevent spreadsheet formula injection, so CSV data may differ slightly from stored values. JSON is lossless.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    format?: "csv" | "json";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Attachment download */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            exportedAt: string;
+                            count: number;
+                            items: components["schemas"]["FoodItem"][];
+                        };
+                        "text/csv": string;
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shopping/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the persisted shopping list */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Shopping list items */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ShoppingListItem"][];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Add an item to the shopping list (max 500 per user) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        quantity?: number;
+                        /** @enum {string} */
+                        unit?: "GRAMS" | "KILOGRAMS" | "MILLILITRES" | "LITRES" | "UNITS" | "SLICES" | "PORTIONS";
+                        /**
+                         * @default OTHER
+                         * @enum {string}
+                         */
+                        category?: "DAIRY" | "MEAT" | "SEAFOOD" | "VEGETABLES" | "FRUITS" | "GRAINS" | "CONDIMENTS" | "BEVERAGES" | "SNACKS" | "FROZEN" | "OTHER";
+                    };
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ShoppingListItem"];
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Shopping list limit reached */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shopping/list/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import items from the derived shopping summary, skipping names already listed */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Newly created items */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ShoppingListItem"][];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Shopping list limit reached */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shopping/list/clear-checked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete all checked items */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Number of removed items */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            removed: number;
+                        };
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shopping/list/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a shopping list item */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Resource not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotFoundError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update or check/uncheck a shopping list item */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        name?: string;
+                        quantity?: number;
+                        /** @enum {string} */
+                        unit?: "GRAMS" | "KILOGRAMS" | "MILLILITRES" | "LITRES" | "UNITS" | "SLICES" | "PORTIONS";
+                        /**
+                         * @default OTHER
+                         * @enum {string}
+                         */
+                        category?: "DAIRY" | "MEAT" | "SEAFOOD" | "VEGETABLES" | "FRUITS" | "GRAINS" | "CONDIMENTS" | "BEVERAGES" | "SNACKS" | "FROZEN" | "OTHER";
+                        checked?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ShoppingListItem"];
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Missing, invalid, or expired credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnauthorizedError"];
+                    };
+                };
+                /** @description Resource not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotFoundError"];
+                    };
+                };
+                /** @description Unexpected server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -941,6 +2117,42 @@ export interface components {
             total: number;
             page: number;
             limit: number;
+            /** @description 0 when total is 0, else ceil(total / limit) */
+            totalPages: number;
+        };
+        ConsumeResult: {
+            item: components["schemas"]["FoodItem"];
+            /** @description True when the amount used up the item (disposed as CONSUMED) */
+            disposed: boolean;
+            /** @description True when the remaining quantity is below minimumQuantity */
+            lowStock: boolean;
+        };
+        WasteStats: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            totals: {
+                consumed: number;
+                discarded: number;
+                total: number;
+                /** @description discarded / total; 0 when total is 0 */
+                wasteRate: number;
+            };
+            byCategory: {
+                category: string;
+                consumed: number;
+                discarded: number;
+            }[];
+            byMonth: {
+                /**
+                 * @description UTC month, ascending
+                 * @example 2026-10
+                 */
+                month: string;
+                consumed: number;
+                discarded: number;
+            }[];
         };
         ExpiryAlert: {
             item: components["schemas"]["FoodItem"];
@@ -966,6 +2178,26 @@ export interface components {
                 unit: string;
             }[];
             matchScore: number;
+            isFavorite?: boolean;
+            expiringSoon?: string[];
+        };
+        UserSettings: {
+            alertWithinDays: number | null;
+            /** @enum {string|null} */
+            diet: "gluten free" | "ketogenic" | "vegetarian" | "lacto-vegetarian" | "ovo-vegetarian" | "vegan" | "pescetarian" | "paleo" | "primal" | "low FODMAP" | "whole30" | null;
+            intolerances: ("dairy" | "egg" | "gluten" | "grain" | "peanut" | "seafood" | "sesame" | "shellfish" | "soy" | "sulfite" | "tree nut" | "wheat")[];
+            /**
+             * @description Reserved; stored but not yet honoured by the notification poller.
+             * @enum {string}
+             */
+            channel: "console" | "webhook";
+        };
+        FavoriteRecipe: {
+            recipeId: number;
+            title: string;
+            imageUrl?: string;
+            sourceUrl?: string;
+            createdAt: string | null;
         };
         ShoppingSummary: {
             generatedAt: string | null;
@@ -1008,6 +2240,24 @@ export interface components {
         };
         UnauthorizedError: {
             error: string;
+        };
+        ShoppingListItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            userId: string;
+            name: string;
+            quantity?: number;
+            /** @enum {string} */
+            unit?: "GRAMS" | "KILOGRAMS" | "MILLILITRES" | "LITRES" | "UNITS" | "SLICES" | "PORTIONS";
+            /**
+             * @default OTHER
+             * @enum {string}
+             */
+            category: "DAIRY" | "MEAT" | "SEAFOOD" | "VEGETABLES" | "FRUITS" | "GRAINS" | "CONDIMENTS" | "BEVERAGES" | "SNACKS" | "FROZEN" | "OTHER";
+            checked: boolean;
+            createdAt: string | null;
+            updatedAt: string | null;
         };
     };
     responses: never;

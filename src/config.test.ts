@@ -60,6 +60,29 @@ describe('config', () => {
     await expect(load()).rejects.toThrow(/PORT/);
   });
 
+  describe('webhook channel', () => {
+    beforeEach(() => {
+      process.env.NOTIFICATION_CHANNELS = 'webhook';
+    });
+    it.each(['', 'ftp://x.test/h', 'not a url', 'https://', 'http:/'])('rejects URL %j', async (u) => {
+      process.env.NOTIFICATION_WEBHOOK_URL = u;
+      await expect(load()).rejects.toThrow(/NOTIFICATION_WEBHOOK_URL/);
+    });
+    it('accepts https URLs', async () => {
+      process.env.NOTIFICATION_WEBHOOK_URL = 'https://hooks.example.com/a?b=1';
+      expect((await load()).notificationWebhookUrl).toBe('https://hooks.example.com/a?b=1');
+    });
+    it('warns about an empty secret outside test env', async () => {
+      process.env.NOTIFICATION_WEBHOOK_URL = 'https://hooks.example.com/a';
+      process.env.NODE_ENV = 'development';
+      process.env.JWT_SECRET = 'x'.repeat(40);
+      process.env.CORS_ORIGIN = 'https://a.test';
+      delete process.env.NOTIFICATION_WEBHOOK_SECRET;
+      await load();
+      expect(warn.mock.calls.flat().join(' ')).toMatch(/NOTIFICATION_WEBHOOK_SECRET is empty/);
+    });
+  });
+
   it('treats empty PORT as default', async () => {
     process.env.PORT = '';
     expect((await load()).port).toBe(3000);

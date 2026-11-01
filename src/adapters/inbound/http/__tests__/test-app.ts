@@ -6,7 +6,21 @@ import { FoodItemController } from '../food-item.controller.js';
 import { ExpiryAlertController } from '../expiry-alert.controller.js';
 import { RecipeController } from '../recipe.controller.js';
 import { ShoppingSummaryController } from '../shopping-summary.controller.js';
+import { DisposalHistoryController } from '../disposal-history.controller.js';
+import { DisposalHistoryService } from '../../../../application/disposal-history.service.js';
+import { InMemoryUserSettingsRepository } from '../../../outbound/persistence/user-settings.in-memory.repository.js';
+import { InMemoryFavoriteRecipeRepository } from '../../../outbound/persistence/favorite-recipe.in-memory.repository.js';
+import { UserSettingsService } from '../../../../application/user-settings.service.js';
+import { FavoriteRecipeService } from '../../../../application/favorite-recipe.service.js';
+import { SettingsController } from '../settings.controller.js';
+import { FavoriteRecipeController } from '../favorite-recipe.controller.js';
 import { AuthController } from '../auth.controller.js';
+import { ShelfLifeController } from '../shelf-life.controller.js';
+import { ExportController } from '../export.controller.js';
+import { ShoppingListController } from '../shopping-list.controller.js';
+import { ExportService } from '../../../../application/export.service.js';
+import { ShoppingListService } from '../../../../application/shopping-list.service.js';
+import { InMemoryShoppingListRepository } from '../../../outbound/persistence/shopping-list.in-memory.repository.js';
 import { FoodItemService } from '../../../../application/food-item.service.js';
 import { ExpiryAlertService } from '../../../../application/expiry-alert.service.js';
 import { RecipeService } from '../../../../application/recipe.service.js';
@@ -51,8 +65,13 @@ export function buildTestApp(
   const userRepo = new InMemoryUserRepository();
 
   const foodItemService = new FoodItemService(repo);
-  const expiryAlertService = new ExpiryAlertService(repo);
-  const recipeService = new RecipeService(repo, recipeProvider);
+  const settingsRepo = new InMemoryUserSettingsRepository();
+  const favoriteRepo = new InMemoryFavoriteRecipeRepository();
+  const expiryAlertService = new ExpiryAlertService(repo, { settings: settingsRepo });
+  const recipeService = new RecipeService(repo, recipeProvider, {
+    settings: settingsRepo,
+    favorites: favoriteRepo,
+  });
   const shoppingSummaryService = new ShoppingSummaryService(repo);
   const authService = new AuthService(userRepo, 'test-secret-not-for-production', '24h');
 
@@ -61,6 +80,14 @@ export function buildTestApp(
   const recipeController = new RecipeController(recipeService);
   const shoppingSummaryController = new ShoppingSummaryController(shoppingSummaryService);
   const authController = new AuthController(authService);
+  const disposalHistoryController = new DisposalHistoryController(new DisposalHistoryService(repo));
+
+  const shoppingListRepo = new InMemoryShoppingListRepository();
+  const shelfLifeController = new ShelfLifeController();
+  const exportController = new ExportController(new ExportService(repo));
+  const shoppingListController = new ShoppingListController(
+    new ShoppingListService(shoppingListRepo, repo),
+  );
 
   const app = createApp(
     foodItemController,
@@ -70,6 +97,12 @@ export function buildTestApp(
     authController,
     authService,
     healthCheckPort,
+    disposalHistoryController,
+    shelfLifeController,
+    exportController,
+    shoppingListController,
+    new SettingsController(new UserSettingsService(settingsRepo)),
+    new FavoriteRecipeController(new FavoriteRecipeService(favoriteRepo)),
   );
 
   return { app, repo, userRepo, recipeProvider };

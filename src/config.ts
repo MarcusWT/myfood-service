@@ -39,6 +39,8 @@ export const config = {
   recipeCacheMaxEntries: parseNumberEnv('RECIPE_CACHE_MAX_ENTRIES', process.env.RECIPE_CACHE_MAX_ENTRIES, 500, { min: 1 }),
   recipeMaxIngredients: parseNumberEnv('RECIPE_MAX_INGREDIENTS', process.env.RECIPE_MAX_INGREDIENTS, 10, { min: 1, max: 50 }),
   expiryAlertDefaultDays: expiryAlertDefaultDays,
+  disposedRetentionDays: parseNumberEnv('DISPOSED_RETENTION_DAYS', process.env.DISPOSED_RETENTION_DAYS, 365, { min: 0, max: 36500 }),
+  disposedPurgeIntervalMs: parseNumberEnv('DISPOSED_PURGE_INTERVAL_MS', process.env.DISPOSED_PURGE_INTERVAL_MS, 86_400_000, { min: 1, max: MAX_TIMER_MS }),
   notificationPollIntervalMs: parseNumberEnv(
     'NOTIFICATION_POLL_INTERVAL_MS',
     process.env.NOTIFICATION_POLL_INTERVAL_MS,
@@ -66,7 +68,34 @@ export const config = {
   bodyLimit: process.env.BODY_LIMIT ?? '100kb',
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  notificationChannels: parseNotificationChannels(process.env.NOTIFICATION_CHANNELS),
+  notificationWebhookUrl: (process.env.NOTIFICATION_WEBHOOK_URL ?? '').trim(),
+  notificationWebhookSecret: process.env.NOTIFICATION_WEBHOOK_SECRET ?? '',
+  notificationWebhookTimeoutMs: parseNumberEnv(
+    'NOTIFICATION_WEBHOOK_TIMEOUT_MS',
+    process.env.NOTIFICATION_WEBHOOK_TIMEOUT_MS,
+    5000,
+    { min: 1, max: MAX_TIMER_MS },
+  ),
 } as const;
+
+function parseNotificationChannels(raw: string | undefined): string[] {
+  if (raw === undefined || raw.trim() === '') return ['console'];
+  const names = [
+    ...new Set(
+      raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ];
+  for (const name of names) {
+    if (name !== 'console' && name !== 'webhook') {
+      throw new Error(`[Config] NOTIFICATION_CHANNELS contains unknown channel '${name}'; allowed: console, webhook.`);
+    }
+  }
+  return names.length > 0 ? names : ['console'];
+}
 
 function parseTrustProxy(value: string | undefined): boolean | number {
   if (value === undefined || value === 'false') return false;
@@ -106,6 +135,31 @@ if (config.jwtSecret === 'change_me_to_a_long_random_secret' && config.nodeEnv !
       'publicly known and would allow anyone to forge authentication tokens. ' +
       'Set JWT_SECRET to a real, random secret.',
   );
+}
+
+if (config.notificationChannels.includes('webhook')) {
+  let webhookUrlValid: boolean;
+  try {
+    const parsed = new URL(config.notificationWebhookUrl);
+    webhookUrlValid = (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname !== '';
+  } catch {
+    webhookUrlValid = false;
+  }
+  if (!webhookUrlValid) {
+    throw new Error(
+      '[Config] NOTIFICATION_WEBHOOK_URL must be an http(s) URL when NOTIFICATION_CHANNELS includes webhook.',
+    );
+  }
+  if (config.notificationWebhookUrl.toLowerCase().startsWith('http:') && config.nodeEnv !== 'test') {
+    console.warn(
+      '[Config] NOTIFICATION_WEBHOOK_URL uses plain http; alert payloads (including user emails) are sent unencrypted.',
+    );
+  }
+  if (!config.notificationWebhookSecret && config.nodeEnv !== 'test') {
+    console.warn(
+      '[Config] NOTIFICATION_WEBHOOK_SECRET is empty; webhook payloads will be sent unsigned.',
+    );
+  }
 }
 
 if (config.corsOrigin === '*' && config.nodeEnv !== 'test') {

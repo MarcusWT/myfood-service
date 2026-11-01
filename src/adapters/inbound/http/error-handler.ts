@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { NotFoundError, ConflictError } from '../../../application/food-item.service.js';
+import { LimitExceededError } from '../../../core/domain/errors.js';
 import { UnauthorizedError } from '../../../application/auth.service.js';
 import { logger } from '../../../logger.js';
 
@@ -41,6 +42,11 @@ export function errorHandler(
 
   if (err instanceof ConflictError) {
     res.status(409).json({ error: err.message });
+    return;
+  }
+
+  if (err instanceof LimitExceededError) {
+    res.status(422).json({ error: err.message });
     return;
   }
 

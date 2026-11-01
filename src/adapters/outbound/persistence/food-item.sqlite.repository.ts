@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
-import { FoodItem, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome } from '../../../core/domain/food-item.js';
+import { FoodItem, UpdateFoodItemInput, FoodItemFilter, DisposalOutcome, FoodItemSortInput, DEFAULT_FOOD_ITEM_SORT, expiryThreshold } from '../../../core/domain/food-item.js';
 import { Location } from '../../../core/domain/value-objects.js';
-import { PaginatedResult, PaginationInput } from '../../../core/domain/pagination.js';
+import { PaginatedResult, PaginationInput, paginate } from '../../../core/domain/pagination.js';
+import { HistoryFilter, DisposalStatsRow, WasteStatsRange } from '../../../core/domain/disposal-history.js';
 import { FoodItemRepositoryPort } from '../../../core/ports/outbound/food-item.repository.port.js';
 import { ConflictError } from '../../../core/domain/errors.js';
 import { isUniqueViolation } from './sqlite-errors.js';
@@ -51,9 +52,9 @@ const duplicateMessage = (name: string, location: string): string =>
 function buildWhereClause(
   userId: string,
   filter?: FoodItemFilter,
-): { where: string; params: Record<string, string> } {
+): { where: string; params: Record<string, string | number> } {
   const conditions: string[] = ['user_id = @userId', 'disposition IS NULL'];
-  const params: Record<string, string> = { userId };
+  const params: Record<string, string | number> = { userId };
 
   if (filter?.location) {
     conditions.push('location = @location');
@@ -68,8 +69,39 @@ function buildWhereClause(
     params.name = `%${escapeLike(filter.name)}%`;
   }
 
+  if (filter?.lowStock === true) {
+    conditions.push('(minimum_quantity IS NOT NULL AND quantity < minimum_quantity)');
+  } else if (filter?.lowStock === false) {
+    conditions.push('(minimum_quantity IS NULL OR quantity >= minimum_quantity)');
+  }
+  if (filter?.expiringBefore) {
+    conditions.push('best_before <= @expiringBefore');
+    params.expiringBefore = filter.expiringBefore.toISOString();
+  }
+  if (filter?.status) {
+    const now = filter.now ?? new Date();
+    params.statusNow = now.toISOString();
+    params.statusLimit = expiryThreshold(now, filter.expiringWithinDays ?? 7).toISOString();
+    if (filter.status === 'expired') conditions.push('best_before < @statusNow');
+    else if (filter.status === 'expiring') {
+      conditions.push('best_before >= @statusNow AND best_before <= @statusLimit');
+    } else conditions.push('best_before > @statusLimit');
+  }
+
   const where = `WHERE ${conditions.join(' AND ')}`;
   return { where, params };
+}
+
+const SORT_COLUMNS: Record<FoodItemSortInput['sort'], string> = {
+  bestBefore: 'best_before',
+  name: 'name COLLATE NOCASE',
+  addedAt: 'added_at',
+  quantity: 'quantity',
+};
+
+function buildOrderBy(sort: FoodItemSortInput): string {
+  const dir = sort.order === 'desc' ? 'DESC' : 'ASC';
+  return `ORDER BY ${SORT_COLUMNS[sort.sort]} ${dir}, id ASC`;
 }
 
 export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
@@ -77,6 +109,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
+    this.db.pragma('busy_timeout = 5000');
     this.db.pragma('journal_mode = WAL');
     runMigrations(this.db, allMigrations);
     // Runs after migrations commit (by design): the schema change that adds
@@ -157,10 +190,14 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     return row ? rowToFoodItem(row) : null;
   }
 
-  async findAll(userId: string, filter?: FoodItemFilter): Promise<FoodItem[]> {
+  async findAll(
+    userId: string,
+    filter?: FoodItemFilter,
+    sort: FoodItemSortInput = DEFAULT_FOOD_ITEM_SORT,
+  ): Promise<FoodItem[]> {
     const { where, params } = buildWhereClause(userId, filter);
     const rows = this.db
-      .prepare(`SELECT * FROM food_items ${where} ORDER BY best_before ASC`)
+      .prepare(`SELECT * FROM food_items ${where} ${buildOrderBy(sort)}`)
       .all(params) as FoodItemRow[];
 
     return rows.map(rowToFoodItem);
@@ -170,6 +207,7 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     userId: string,
     filter: FoodItemFilter,
     pagination: PaginationInput,
+    sort: FoodItemSortInput = DEFAULT_FOOD_ITEM_SORT,
   ): Promise<PaginatedResult<FoodItem>> {
     const { where, params } = buildWhereClause(userId, filter);
 
@@ -180,10 +218,10 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
     const { page, limit } = pagination;
     const offset = (page - 1) * limit;
     const rows = this.db
-      .prepare(`SELECT * FROM food_items ${where} ORDER BY best_before ASC LIMIT @limit OFFSET @offset`)
+      .prepare(`SELECT * FROM food_items ${where} ${buildOrderBy(sort)} LIMIT @limit OFFSET @offset`)
       .all({ ...params, limit, offset }) as FoodItemRow[];
 
-    return { data: rows.map(rowToFoodItem), total: count, page, limit };
+    return paginate(rows.map(rowToFoodItem), count, pagination);
   }
 
   async findByNameAndLocation(
@@ -260,6 +298,109 @@ export class SqliteFoodItemRepository implements FoodItemRepositoryPort {
       .prepare('SELECT * FROM food_items WHERE id = ? AND user_id = ?')
       .get(id, userId) as FoodItemRow;
     return rowToFoodItem(row);
+  }
+
+  async consume(id: string, userId: string, amount: number): Promise<FoodItem | null> {
+    const now = new Date().toISOString();
+    const row = this.db
+      .prepare(
+        `UPDATE food_items
+         SET quantity = CASE WHEN ROUND(quantity - @amount, 6) > 0 THEN ROUND(quantity - @amount, 6) ELSE quantity END,
+             disposition = CASE WHEN ROUND(quantity - @amount, 6) > 0 THEN NULL ELSE 'CONSUMED' END,
+             disposed_at = CASE WHEN ROUND(quantity - @amount, 6) > 0 THEN NULL ELSE @now END,
+             updated_at = @now
+         WHERE id = @id AND user_id = @userId AND disposition IS NULL
+         RETURNING *`,
+      )
+      .get({ amount, now, id, userId }) as FoodItemRow | undefined;
+    return row ? rowToFoodItem(row) : null;
+  }
+
+  async findDisposedPaginated(
+    userId: string,
+    filter: HistoryFilter,
+    pagination: PaginationInput,
+  ): Promise<PaginatedResult<FoodItem>> {
+    const conditions = ['user_id = @userId', 'disposition IS NOT NULL'];
+    const params: Record<string, string | number> = { userId };
+    if (filter.outcome) {
+      conditions.push('disposition = @outcome');
+      params.outcome = filter.outcome;
+    }
+    if (filter.from) {
+      conditions.push('disposed_at >= @from');
+      params.from = filter.from.toISOString();
+    }
+    if (filter.to) {
+      conditions.push('disposed_at <= @to');
+      params.to = filter.to.toISOString();
+    }
+    const where = `WHERE ${conditions.join(' AND ')}`;
+    const { count } = this.db
+      .prepare(`SELECT COUNT(*) as count FROM food_items ${where}`)
+      .get(params) as { count: number };
+    const { page, limit } = pagination;
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM food_items ${where} ORDER BY disposed_at DESC, id ASC LIMIT @limit OFFSET @offset`,
+      )
+      .all({ ...params, limit, offset: (page - 1) * limit }) as FoodItemRow[];
+    return paginate(rows.map(rowToFoodItem), count, pagination);
+  }
+
+  async findDisposedById(id: string, userId: string): Promise<FoodItem | null> {
+    const row = this.db
+      .prepare('SELECT * FROM food_items WHERE id = ? AND user_id = ? AND disposition IS NOT NULL')
+      .get(id, userId) as FoodItemRow | undefined;
+    return row ? rowToFoodItem(row) : null;
+  }
+
+  async restore(id: string, userId: string): Promise<FoodItem | null> {
+    try {
+      const row = this.db
+        .prepare(
+          `UPDATE food_items SET disposition = NULL, disposed_at = NULL, updated_at = @now
+           WHERE id = @id AND user_id = @userId AND disposition IS NOT NULL
+           RETURNING *`,
+        )
+        .get({ id, userId, now: new Date().toISOString() }) as FoodItemRow | undefined;
+      return row ? rowToFoodItem(row) : null;
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const existing = this.db
+          .prepare('SELECT name, location FROM food_items WHERE id = ? AND user_id = ?')
+          .get(id, userId) as { name: string; location: string } | undefined;
+        throw new ConflictError(
+          existing
+            ? `Cannot restore: an active item named '${existing.name}' already exists in ${existing.location}`
+            : 'Cannot restore: an active item with the same name already exists in that location',
+        );
+      }
+      throw err;
+    }
+  }
+
+  async getDisposalStats(userId: string, range: WasteStatsRange): Promise<DisposalStatsRow[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT category, substr(disposed_at, 1, 7) AS month,
+                SUM(CASE WHEN disposition = 'CONSUMED' THEN 1 ELSE 0 END) AS consumed,
+                SUM(CASE WHEN disposition = 'DISCARDED' THEN 1 ELSE 0 END) AS discarded
+         FROM food_items
+         WHERE user_id = @userId AND disposition IS NOT NULL
+           AND disposed_at >= @from AND disposed_at <= @to
+         GROUP BY category, month
+         ORDER BY month ASC, category ASC`,
+      )
+      .all({ userId, from: range.from.toISOString(), to: range.to.toISOString() }) as DisposalStatsRow[];
+    return rows;
+  }
+
+  async purgeDisposedBefore(cutoff: Date): Promise<number> {
+    const result = this.db
+      .prepare('DELETE FROM food_items WHERE disposition IS NOT NULL AND disposed_at < ?')
+      .run(cutoff.toISOString());
+    return result.changes;
   }
 
   async delete(id: string, userId: string): Promise<boolean> {

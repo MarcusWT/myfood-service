@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SqliteFoodItemRepository } from '../food-item.sqlite.repository.js';
+import { allMigrations } from '../migrations/index.js';
 import type { FoodItem } from '../../../../core/domain/food-item.js';
 
 const USER_ID = 'user-0000-0000-0000-0000-000000000001';
@@ -315,7 +316,7 @@ describe('SqliteFoodItemRepository', () => {
         const migrationRows = verifyDb
           .prepare('SELECT id FROM schema_migrations ORDER BY id ASC')
           .all() as { id: number }[];
-        expect(migrationRows.map((r) => r.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+        expect(migrationRows.map((r) => r.id)).toEqual(allMigrations.map((m) => m.id));
 
         const existingRow = verifyDb
           .prepare('SELECT * FROM food_items WHERE id = ?')

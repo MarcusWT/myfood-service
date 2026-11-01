@@ -4,16 +4,16 @@ import { NotificationLogPort } from '../../../core/ports/outbound/notification-l
 export class InMemoryNotificationLogRepository implements NotificationLogPort {
   private readonly sent = new Set<string>();
 
-  private key(userId: string, a: ExpiryAlert, day: string): string {
-    return JSON.stringify([userId, a.item.id, a.status, day]);
+  private key(userId: string, a: ExpiryAlert, day: string, channel = ''): string {
+    return JSON.stringify([userId, a.item.id, a.status, day, channel]);
   }
 
-  async filterUnsent(userId: string, alerts: ExpiryAlert[], day: string): Promise<ExpiryAlert[]> {
-    return alerts.filter((a) => !this.sent.has(this.key(userId, a, day)));
+  async filterUnsent(userId: string, alerts: ExpiryAlert[], day: string, channel = ''): Promise<ExpiryAlert[]> {
+    return alerts.filter((a) => !this.sent.has(this.key(userId, a, day, channel)));
   }
 
-  async markSent(userId: string, alerts: ExpiryAlert[], day: string): Promise<void> {
-    for (const a of alerts) this.sent.add(this.key(userId, a, day));
+  async markSent(userId: string, alerts: ExpiryAlert[], day: string, channel = ''): Promise<void> {
+    for (const a of alerts) this.sent.add(this.key(userId, a, day, channel));
   }
 
   async pruneBefore(day: string): Promise<number> {

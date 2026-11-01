@@ -73,10 +73,12 @@ export class NotificationPoller {
       const users = await this.userRepository.listAll();
       for (const user of users) {
         try {
-          const alerts = await this.expiryAlertService.getAlerts(user.id, this.withinDays);
+          const alerts = await this.expiryAlertService.getAlerts(user.id, undefined, {
+            fallbackDays: this.withinDays,
+          });
           const unsent = await this.notificationLog.filterUnsent(user.id, alerts, day);
           if (unsent.length > 0) {
-            await this.notificationPort.notify(unsent);
+            await this.notificationPort.notify({ userId: user.id, email: user.email }, unsent);
             await this.notificationLog.markSent(user.id, unsent, day);
           }
         } catch (err) {

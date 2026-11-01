@@ -6,6 +6,11 @@ import { createUsersMigration } from './004-create-users.js';
 import { addDispositionMigration } from './005-add-disposition.js';
 import { uniqueActiveFoodItemNameMigration } from './006-unique-active-food-item-name.js';
 import { createNotificationsSentMigration } from './007-create-notifications-sent.js';
+import { indexDisposedHistoryMigration } from './008-index-disposed-history.js';
+import { createUserSettingsMigration } from './009-create-user-settings.js';
+import { createFavoriteRecipesMigration } from './011-create-favorite-recipes.js';
+import { createShoppingListItemsMigration } from './010-create-shopping-list-items.js';
+import { addChannelToNotificationsSentMigration } from './012-add-channel-to-notifications-sent.js';
 
 export type { Migration };
 export { runMigrations } from './migration-runner.js';
@@ -28,4 +33,9 @@ export const allMigrations: Migration[] = [
   addDispositionMigration,
   uniqueActiveFoodItemNameMigration,
   createNotificationsSentMigration,
+  indexDisposedHistoryMigration,
+  createUserSettingsMigration,
+  createShoppingListItemsMigration,
+  createFavoriteRecipesMigration,
+  addChannelToNotificationsSentMigration,
 ];

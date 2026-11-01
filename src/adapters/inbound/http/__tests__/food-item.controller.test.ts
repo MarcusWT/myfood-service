@@ -141,7 +141,7 @@ describe('FoodItemController (HTTP)', () => {
       const res = await request(app).get('/api/v1/food-items').set('Authorization', authHeader);
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ data: [], total: 0, page: 1, limit: 20 });
+      expect(res.body).toEqual({ data: [], total: 0, page: 1, limit: 20, totalPages: 0 });
     });
 
     it('returns all seeded items within the default page', async () => {
