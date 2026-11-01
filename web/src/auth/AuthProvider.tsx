@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
+import { ApiError } from '@/api/errors';
 import { onUnauthorized, session } from './session';
 
 export interface User {
@@ -8,7 +10,7 @@ export interface User {
   email: string;
 }
 
-type Status = 'loading' | 'authenticated' | 'unauthenticated';
+type Status = 'loading' | 'authenticated' | 'unauthenticated' | 'error';
 
 interface AuthContextValue {
   status: Status;
@@ -16,23 +18,35 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  expired: boolean;
+  retry: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
+  const [expired, setExpired] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<Status>(() =>
     session.getToken() ? 'loading' : 'unauthenticated',
   );
 
-  const clear = useCallback(() => {
-    session.clear();
-    setUser(null);
-    setStatus('unauthenticated');
-  }, []);
+  const clear = useCallback(
+    (wasExpired = false) => {
+      session.clear();
+      queryClient.clear();
+      setUser(null);
+      setExpired(wasExpired);
+      setStatus('unauthenticated');
+    },
+    [queryClient],
+  );
 
-  // Validate a stored token on load.
+  const logout = useCallback(() => clear(false), [clear]);
+
+  // Validate a stored token on load. Only a 401 ends the session; network/5xx keep it.
   useEffect(() => {
     if (!session.getToken()) return;
     let cancelled = false;
@@ -40,26 +54,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .GET('/auth/me')
       .then(({ data }) => {
         if (cancelled) return;
+        if (!session.getToken()) {
+          clear();
+          return;
+        }
         if (data) {
           setUser(data);
           setStatus('authenticated');
-        } else clear();
+        } else clear(true);
       })
-      .catch(() => {
-        // 401 (expired/invalid), network, or server error: end the session; user can log in again.
-        if (!cancelled) clear();
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 401) clear(true);
+        else setStatus('error');
       });
     return () => {
       cancelled = true;
     };
-  }, [clear]);
+  }, [clear, attempt]);
 
   // Any 401 from a protected endpoint ends the session.
-  useEffect(() => onUnauthorized(clear), [clear]);
+  useEffect(
+    () =>
+      onUnauthorized(() => {
+        if (session.getToken()) clear(true);
+      }),
+    [clear],
+  );
+
+  const retry = useCallback(() => {
+    setStatus('loading');
+    setAttempt((n) => n + 1);
+  }, []);
 
   const establish = useCallback((token: string, u: User) => {
     session.setToken(token);
     setUser(u);
+    setExpired(false);
     setStatus('authenticated');
   }, []);
 
@@ -80,8 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ status, user, login, register, logout: clear }),
-    [status, user, login, register, clear],
+    () => ({ status, user, login, register, logout, expired, retry }),
+    [status, user, login, register, logout, expired, retry],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

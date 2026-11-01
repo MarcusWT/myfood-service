@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 const API_PORT = 3100;
 const WEB_PORT = 5174;
@@ -10,6 +10,10 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: { baseURL: `http://localhost:${WEB_PORT}`, trace: 'on-first-retry' },
+  projects: [
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
+  ],
   webServer: [
     {
       // Real backend, in-memory repositories. Spoonacular is never called by these flows.

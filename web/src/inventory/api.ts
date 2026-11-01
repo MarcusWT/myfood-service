@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from '@/api/client';
+import { toastError, toastSuccess } from '@/lib/toast';
 import type { FoodItem } from './constants';
 
 export interface ListParams {
@@ -46,33 +47,108 @@ export function useFoodItems(p: ListParams) {
   });
 }
 
-function useInvalidating<TVars>(fn: (v: TVars) => Promise<unknown>) {
+function useInvalidate() {
   const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: ['food-items'] });
+    void qc.invalidateQueries({ queryKey: ['alerts'] });
+    void qc.invalidateQueries({ queryKey: ['shopping'] });
+    qc.removeQueries({ queryKey: ['recipes'] });
+  };
+}
+
+interface HookOptions {
+  quietErrors?: boolean;
+}
+
+export function toCreateInput(item: FoodItem): CreateInput {
+  return {
+    name: item.name,
+    quantity: item.quantity,
+    unit: item.unit,
+    location: item.location,
+    category: item.category,
+    bestBefore: item.bestBefore as string,
+    ...(item.notes ? { notes: item.notes } : {}),
+    ...(item.minimumQuantity !== undefined && item.minimumQuantity !== null
+      ? { minimumQuantity: item.minimumQuantity }
+      : {}),
+  };
+}
+
+export function useCreateItem({ quietErrors }: HookOptions = {}) {
+  const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: fn,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['food-items'] });
-      void qc.invalidateQueries({ queryKey: ['alerts'] });
-      void qc.invalidateQueries({ queryKey: ['shopping'] });
+    mutationFn: (body: CreateInput) => api.POST('/food-items', { body }),
+    onSuccess: (_d, body) => {
+      invalidate();
+      toastSuccess(`Added "${body.name}"`);
+    },
+    onError: (e) => {
+      if (!quietErrors) toastError(e);
     },
   });
 }
 
-export const useCreateItem = () =>
-  useInvalidating((body: CreateInput) => api.POST('/food-items', { body }));
+export function useUpdateItem({ quietErrors }: HookOptions = {}) {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (v: { id: string; name: string; body: UpdateInput; previous?: UpdateInput }) =>
+      api.PATCH('/food-items/{id}', { params: { path: { id: v.id } }, body: v.body }),
+    onSuccess: (_d, v) => {
+      invalidate();
+      const canUndo = v.previous && Object.keys(v.previous).length > 0 && !('bestBefore' in v.body);
+      toastSuccess(`Updated "${v.name}"`, {
+        undo: canUndo
+          ? async () => {
+              await api.PATCH('/food-items/{id}', {
+                params: { path: { id: v.id } },
+                body: v.previous!,
+              });
+              invalidate();
+            }
+          : undefined,
+      });
+    },
+    onError: (e) => {
+      if (!quietErrors) toastError(e);
+    },
+  });
+}
 
-export const useUpdateItem = () =>
-  useInvalidating((v: { id: string; body: UpdateInput }) =>
-    api.PATCH('/food-items/{id}', { params: { path: { id: v.id } }, body: v.body }),
-  );
+export function useDisposeItem() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (v: { id: string; name: string; outcome: 'CONSUMED' | 'DISCARDED' }) =>
+      api.POST('/food-items/{id}/dispose', {
+        params: { path: { id: v.id } },
+        body: { outcome: v.outcome },
+      }),
+    onSuccess: (_d, v) => {
+      invalidate();
+      toastSuccess(`Marked "${v.name}" as ${v.outcome === 'CONSUMED' ? 'consumed' : 'discarded'}`);
+    },
+    onError: (e) => toastError(e),
+  });
+}
 
-export const useDisposeItem = () =>
-  useInvalidating((v: { id: string; outcome: 'CONSUMED' | 'DISCARDED' }) =>
-    api.POST('/food-items/{id}/dispose', {
-      params: { path: { id: v.id } },
-      body: { outcome: v.outcome },
-    }),
-  );
-
-export const useRemoveItem = () =>
-  useInvalidating((id: string) => api.DELETE('/food-items/{id}', { params: { path: { id } } }));
+export function useRemoveItem() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (v: { id: string; item: FoodItem }) =>
+      api.DELETE('/food-items/{id}', { params: { path: { id: v.id } } }),
+    onSuccess: (_d, { item }) => {
+      invalidate();
+      const restorable = !!item.bestBefore && new Date(item.bestBefore).getTime() > Date.now();
+      toastSuccess(`Removed "${item.name}"`, {
+        undo: restorable
+          ? async () => {
+              await api.POST('/food-items', { body: toCreateInput(item) });
+              invalidate();
+            }
+          : undefined,
+      });
+    },
+    onError: (e) => toastError(e),
+  });
+}

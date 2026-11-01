@@ -31,7 +31,7 @@ describe('auth flow', () => {
     await userEvent.type(screen.getByLabelText('Email'), 'a@b.com');
     await userEvent.type(screen.getByLabelText('Password'), 'password1');
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
-    expect(await screen.findByText('Signed in as a@b.com')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
     expect(sessionStorage.getItem('myfood.token')).toBe('t1');
   });
 
@@ -82,7 +82,7 @@ describe('auth flow', () => {
     sessionStorage.setItem('myfood.token', 't1');
     server.use(http.get(`${API}/auth/me`, () => HttpResponse.json(user)));
     renderApp('/');
-    expect(await screen.findByText('Signed in as a@b.com')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
   });
 
   it('clears an invalid stored token and redirects to login with a return URL', async () => {
@@ -95,13 +95,110 @@ describe('auth flow', () => {
     await waitFor(() => expect(sessionStorage.getItem('myfood.token')).toBeNull());
   });
 
+  it('does not resurrect the session when logged out while /auth/me is in flight', async () => {
+    sessionStorage.setItem('myfood.token', 't1');
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    server.use(
+      http.get(`${API}/auth/me`, async () => {
+        await gate;
+        return HttpResponse.json(user);
+      }),
+    );
+    renderApp('/');
+    sessionStorage.removeItem('myfood.token');
+    release();
+    expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Dashboard' })).toBeNull();
+  });
+
   it('logs out', async () => {
     sessionStorage.setItem('myfood.token', 't1');
     server.use(http.get(`${API}/auth/me`, () => HttpResponse.json(user)));
     renderApp('/');
-    await userEvent.click(await screen.findByRole('button', { name: 'Log out' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Account menu' }));
+    expect(await screen.findByText('a@b.com')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Log out' }));
     expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument();
     expect(sessionStorage.getItem('myfood.token')).toBeNull();
+  });
+
+  it('keeps the token and offers retry when /auth/me fails with 500', async () => {
+    sessionStorage.setItem('myfood.token', 't1');
+    let fail = true;
+    server.use(
+      http.get(`${API}/auth/me`, () =>
+        fail ? HttpResponse.json({ error: 'boom' }, { status: 500 }) : HttpResponse.json(user),
+      ),
+    );
+    renderApp('/');
+    expect(await screen.findByRole('heading', { name: "Can't reach the server" })).toBeVisible();
+    expect(sessionStorage.getItem('myfood.token')).toBe('t1');
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+  });
+
+  it('sends a mid-session 401 to login with an expired notice and does not loop', async () => {
+    sessionStorage.setItem('myfood.token', 't1');
+    let alertCalls = 0;
+    server.use(
+      http.get(`${API}/auth/me`, () => HttpResponse.json(user)),
+      http.get(`${API}/alerts/expiry`, () => {
+        alertCalls++;
+        return HttpResponse.json({ error: 'expired' }, { status: 401 });
+      }),
+    );
+    renderApp('/alerts');
+    expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Your session has expired. Please log in again.',
+    );
+    expect(sessionStorage.getItem('myfood.token')).toBeNull();
+    expect(alertCalls).toBe(1);
+  });
+
+  it('clears the query cache on logout', async () => {
+    sessionStorage.setItem('myfood.token', 't1');
+    server.use(http.get(`${API}/auth/me`, () => HttpResponse.json(user)));
+    const { client } = renderApp('/');
+    await screen.findByRole('heading', { name: 'Dashboard' });
+    await waitFor(() => expect(client.getQueryCache().getAll().length).toBeGreaterThan(0));
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Log out' }));
+    await screen.findByRole('heading', { name: 'Log in' });
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
+  });
+
+  it('toggles the password visibility', async () => {
+    renderApp('/login');
+    const input = screen.getByLabelText('Password');
+    expect(input).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(input).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Hide password' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('focuses the first invalid field after a server validation error', async () => {
+    server.use(
+      http.post(`${API}/auth/register`, () =>
+        HttpResponse.json(
+          { error: 'Validation Error', details: [{ path: ['email'], message: 'Taken' }] },
+          { status: 400 },
+        ),
+      ),
+    );
+    renderApp('/register');
+    await userEvent.type(screen.getByLabelText('Email'), 'a@b.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'password1');
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    await screen.findByText('Taken');
+    await waitFor(() => expect(screen.getByLabelText('Email')).toHaveFocus());
   });
 });
 

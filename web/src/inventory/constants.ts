@@ -31,7 +31,4 @@ export const UNITS: Unit[] = [
 
 export const label = (v: string) => v.charAt(0) + v.slice(1).toLowerCase();
 
-export function daysUntil(iso: string | null, now = new Date()): number | null {
-  if (!iso) return null;
-  return Math.ceil((new Date(iso).getTime() - now.getTime()) / 86_400_000);
-}
+export { daysUntil } from '@/lib/expiry';

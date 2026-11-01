@@ -1,26 +1,51 @@
-import { useEffect, useState } from 'react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useTheme } from './useTheme';
+import type { Theme } from './theme';
 
-const KEY = 'myfood.theme';
+const OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+];
 
-function initial(): boolean {
-  const stored = localStorage.getItem(KEY);
-  if (stored) return stored === 'dark';
+export function ThemeMenuItems() {
+  const { theme, setTheme } = useTheme();
   return (
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Theme</DropdownMenuLabel>
+      <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+        {OPTIONS.map(({ value, label, icon: Icon }) => (
+          <DropdownMenuRadioItem key={value} value={value}>
+            <Icon aria-hidden="true" />
+            {label}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuGroup>
   );
 }
 
 export function ThemeToggle() {
-  const [dark, setDark] = useState(initial);
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark);
-    localStorage.setItem(KEY, dark ? 'dark' : 'light');
-  }, [dark]);
+  const { resolvedTheme } = useTheme();
+  const Icon = resolvedTheme === 'dark' ? Moon : Sun;
   return (
-    <Button variant="outline" size="sm" aria-pressed={dark} onClick={() => setDark((d) => !d)}>
-      Dark mode
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Theme" />}>
+        <Icon aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <ThemeMenuItems />
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

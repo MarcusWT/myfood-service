@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,6 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FormError } from '@/components/form-error';
+import { focusFirstInvalid } from '@/lib/focusFirstInvalid';
+import { MAIN_CONTENT_ID } from '@/shell/constants';
 
 const schema = z.object({
   email: z.string().trim().email('Enter a valid email address'),
@@ -21,6 +25,11 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
   const { login, register: registerUser } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const location = useLocation();
+  const expired = (location.state as { expired?: boolean } | null)?.expired === true;
+  const formRef = useRef<HTMLFormElement>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [focusTick, setFocusTick] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const {
     register,
@@ -28,6 +37,10 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
     setError,
     formState: { errors, isSubmitting },
   } = useForm<Values>({ resolver: zodResolver(schema) });
+
+  useEffect(() => {
+    if (focusTick > 0) focusFirstInvalid(formRef.current);
+  }, [focusTick]);
 
   const isLogin = mode === 'login';
 
@@ -49,7 +62,8 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
             mapped = true;
           }
         }
-        if (!mapped) setFormError(err.message);
+        if (mapped) setFocusTick((n) => n + 1);
+        else setFormError(err.message);
       } else {
         setFormError(err.message);
       }
@@ -57,7 +71,11 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
   });
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm items-center p-4">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex min-h-screen max-w-sm items-center p-4 outline-none"
+    >
       <Card className="w-full">
         <CardHeader>
           <CardTitle>
@@ -65,12 +83,16 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={onSubmit} noValidate className="space-y-4">
-            {formError && (
-              <p role="alert" className="text-sm text-red-600">
-                {formError}
+          <form ref={formRef} onSubmit={onSubmit} noValidate className="space-y-4">
+            {expired && !formError && (
+              <p
+                role="status"
+                className="rounded-md bg-warning px-3 py-2 text-sm text-warning-foreground"
+              >
+                Your session has expired. Please log in again.
               </p>
             )}
+            <FormError>{formError}</FormError>
             <div className="space-y-1">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -81,29 +103,41 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
                 aria-describedby={errors.email ? 'email-error' : undefined}
                 {...register('email')}
               />
-              {errors.email && (
-                <p id="email-error" className="text-sm text-red-600">
-                  {errors.email.message}
-                </p>
-              )}
+              <FormError id="email-error">{errors.email?.message}</FormError>
             </div>
             <div className="space-y-1">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete={isLogin ? 'current-password' : 'new-password'}
-                aria-invalid={!!errors.password}
-                aria-describedby={errors.password ? 'password-error' : undefined}
-                {...register('password')}
-              />
-              {errors.password && (
-                <p id="password-error" className="text-sm text-red-600">
-                  {errors.password.message}
-                </p>
-              )}
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  aria-invalid={!!errors.password}
+                  aria-describedby={errors.password ? 'password-error' : undefined}
+                  className="pr-10"
+                  {...register('password')}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute top-1/2 right-1 -translate-y-1/2"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                </Button>
+              </div>
+              <FormError id="password-error">{errors.password?.message}</FormError>
             </div>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting && <Loader2 className="animate-spin" aria-hidden="true" />}
               {isSubmitting ? 'Please wait…' : isLogin ? 'Log in' : 'Create account'}
             </Button>
           </form>

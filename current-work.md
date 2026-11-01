@@ -111,81 +111,105 @@ Effort: S = under half a day, M = 1-2 days, L = more than 2 days.
 
 ---
 
-## Tier 3: Frontend UX and polish (highest user-visible impact)
+## Tier 3: Frontend UX and polish — items 13-26 DONE
 
 Suggested order: quick wins first, then layout, then skeletons, then inventory, then dashboard and recipes, then cleanup.
 
-### 13. Mobile-responsive navigation and app shell (M)
+### Status: items 13-26 done (planned, implemented in 3 groups, reviewed, fixed, re-verified; no HIGH findings)
+- Final state: root typecheck/lint and 359 backend tests pass (backend untouched). Web lint, typecheck and build pass, 146 tests pass (3 consecutive runs), e2e 6/6 (desktop-chromium + mobile-chromium with axe). Web `format:check` still only has the 2 pre-existing failures (`web/README.md`, `web/test-results/.last-run.json`). Runtime smoke test at 1280px and 375px passed (register, add with expiry preset + toast, empty state, filters, consume, kebab, dashboard, shopping, recipes error without API key, dark mode persistence, corrupted-token redirect with notice).
+- Key decisions:
+  - Shell: `AppLayout` stays in `pages/`, with a mobile sheet, account menu (email, theme, logout) and a single `<main id="main-content">`. Pages use `PageHeader` and must not render their own `<main>`.
+  - Theme: `useTheme` (light/dark/system) in `shell/`, plus an external `public/theme-init.js` because the nginx CSP forbids inline scripts. Keep it in sync with `shell/theme.ts`. `--warning`/`--success` tokens added; primary is now green.
+  - Toasts: `sonner`, with toasts living in the mutation hooks. Undo exists for edit (not when `bestBefore` changed) and remove (re-POST, new id; only when `bestBefore` is in the future). There is NO undo for consumed/discarded (no restore endpoint; recorded in `next-steps.md`).
+  - Inventory: always-mounted `ItemFormDialog` + hoisted `ItemList` dialogs, kebab menu, `NativeSelect`. Filters live in URL params with `useInventoryFilters`, chips and numbered `Pagination`. Sort, `lowStock` and `expiringBefore` are DEFERRED until backend item 28.
+  - Dashboard uses existing endpoints only: three `limit=1` count queries (`['food-items','count',loc]`) and a low-stock list derived from `/shopping/summary`.
+  - Recipes: `useQuery(enabled:false)` with manual refetch, cached across navigation and dropped when inventory mutates; `AuthProvider` clears the query cache on logout/401.
+  - Shopping: ticks persisted per user in localStorage (`myfood.shopping.checked.<userId>`, not cleared on logout), pruned after a successful load; identical entries are de-duplicated.
+  - Hygiene: lazy routes, per-route error boundaries, 401 handling that ignores stale tokens, load-time `/auth/me` failures (network/5xx) keep the token and show a Retry panel, `lib/date.ts` and `lib/expiry.ts` as single sources.
+- Deploy notes: new dependencies `sonner` and `@axe-core/playwright` (dev). Rebuild the `web` Docker image so `theme-init.js` ships; the Docker/nginx CSP path for it was not exercised here (only Vite dev and `vite build` output were checked).
+
+### Follow-ups from review (not yet done)
+- MEDIUM: `InventoryPage` out-of-range redirect can loop if the server returns an inconsistent response (`page === totalPages` but empty `data`). Add `&& page !== totalPages` and wrap `setPage` in `useCallback`.
+- MEDIUM: `AuthProvider` in-flight `/auth/me` is not cancelled by logout/login. A late 401 after a deliberate logout shows the "session expired" notice, and a late response after re-login can overwrite the new user. Capture the token at effect start and bail unless `session.getToken()` still matches.
+- LOW: `useInventoryFilters` `written` state can go stale after `clear()` when `name` is already empty; `useCheckedItems` prune leaves state unpruned (an item that disappears and returns shows as checked again).
+- LOW: Undo for edit overwrites concurrent changes made elsewhere; Undo for remove returns the item with a new id and timestamps; a failed undo can't be retried.
+- LOW: the sr-only item name in the Consumed button duplicates the name for `getByText` (use `aria-label`); focus drops to `body` after Consumed/Discarded; several `role="status"` regions can coexist; coarse-pointer 44px rule may inflate dense controls (check visually).
+- LOW: Shopping share failure reports "Could not copy"; copy/share include checked items when all are checked; shopping load error has no Retry; no `execCommand` clipboard fallback.
+- LOW: dashboard makes 5 requests per load (a stats endpoint would cut that); `RouteAnnouncer` title map is static (pages may use `useDocumentTitle`).
+- LOW: remaining fixed-delay `delay()`/`setTimeout` in overview/recipes/shopping tests; `npm audit --omit=dev` in `web/` still reports moderate `shadcn`/`ts-morph` findings (moving `shadcn` to devDependencies is still open).
+- Housekeeping: a tester left `smoke.db`/`smoke.log` in the approved temp dir (outside the repo); `.opencode/` is untracked and probably should be gitignored.
+
+### 13. Mobile-responsive navigation and app shell (M) — DONE
 - Source: FE 1, FE 10.
 - `AppLayout.tsx` has one non-wrapping flex row, so it overflows on phones. Add a mobile sheet or menu, a sticky blurred header, an active-link style, a user dropdown (email, theme, logout), a skip-to-content link and a single `<main>` with a shared container.
 - Introduce a `PageHeader` component and unify heading sizes.
 
-### 14. Toast feedback and mutation states (S to M)
+### 14. Toast feedback and mutation states (S to M) — DONE
 - Source: FE 5, FE 2.
 - Add `sonner` for toasts on add, edit, consume and delete, with Undo where possible.
 - Fix inline errors that are never cleared in `ItemRow`, and add a try/catch to clipboard copy.
 - Add pending and disabled states on mutation buttons to stop double-submits.
 
-### 15. Skeleton loading states and `keepPreviousData` (M)
+### 15. Skeleton loading states and `keepPreviousData` (M) — DONE
 - Source: FE 2.
 - Replace "Loading…" text on the Inventory, Alerts, Shopping, Dashboard and Recipes pages with skeletons.
 - Use `placeholderData: keepPreviousData` on the paginated inventory query.
 
-### 16. Empty states with a call to action (S)
+### 16. Empty states with a call to action (S) — DONE
 - Source: FE 6.
 - Build a reusable `EmptyState` with an icon, an explanation and a CTA: "Add your first item", "Clear filters".
 - Distinguish "no items yet" from "no filter matches".
 
-### 17. Inventory row actions and hierarchy (M)
+### 17. Inventory row actions and hierarchy (M) — DONE
 - Source: FE 4, FE 11.
 - Make Consumed the primary action, and move Edit, Discarded and Remove into a kebab `DropdownMenu`. Style Remove and its confirm as destructive.
 - Fix label-in-name (visible text versus `aria-label`).
 - Add status accents for expired and expiring rows, badges instead of dot-separated text, relative dates with `<time>`, and optionally a table on `md+`.
 - Hoist the per-row dialogs to list level.
 
-### 18. Shared select component and consistent form controls (M)
+### 18. Shared select component and consistent form controls (M) — DONE
 - Source: FE 3, FE 12.
 - Three ad-hoc native `select` class strings, with no focus ring. Create a shared `NativeSelect` (or use shadcn `Select`).
 - On the item form: a two-column grid on `sm+`, `type="number"`/`inputMode`, autofocus, a notes counter, `max-h-[90dvh] overflow-y-auto`, expiry presets (+3d, +1w, +1m), and a submit spinner.
 - Control the dialog's `open` state so exit animations run.
 
-### 19. Theme and colour fixes (S)
+### 19. Theme and colour fixes (S) — DONE
 - Source: FE 9.
 - Replace hard-coded `text-red-600` and `bg-yellow-200` with semantic tokens (`text-destructive` and a warning token).
 - Make `ThemeToggle` an icon button with a System option, and add an inline script in `index.html` to prevent the dark-mode flash.
 - Add `theme-color`, `color-scheme` and a favicon.
 
-### 20. Visual modernisation (M)
+### 20. Visual modernisation (M) — DONE
 - Source: FE 7.
 - Use `Card` consistently with hover and focus states. Add stat-card icons and colour coding, rounded-xl and subtle shadows.
 - Check the primary colour in `index.css`; it may still be the default neutral grey.
 
-### 21. Accessibility pass (M)
+### 21. Accessibility pass (M) — DONE
 - Source: FE 10.
 - Per-route `document.title`, focus management on route change, `role="alert"` on form errors with focus on the first invalid field, `aria-live` result counts, pagination labels, `role="status"` on loading messages, 44px tap targets, and `prefers-reduced-motion`.
 - Add `@axe-core/playwright` and a mobile viewport project to the e2e suite.
 
-### 22. Dashboard improvements (M)
+### 22. Dashboard improvements (M) — DONE
 - Source: FE 8.
 - Handle `isError`. Add a low-stock list, a per-location breakdown, quick actions, and links on the alert items.
 - Stop fetching a full inventory page just to read `total`.
 
-### 23. Recipes page (S to M)
+### 23. Recipes page (S to M) — DONE
 - Source: FE 13.
 - It uses `useMutation` for a GET, so results are lost on navigation. Switch to `useQuery` with a manual refetch.
 - Responsive card grid, lazy-loaded images, and badges for missing and used ingredients. Remove the `data!` non-null assertion.
 
-### 24. Inventory filters and search (M)
+### 24. Inventory filters and search (M) — DONE
 - Source: FE 11, BE 21.
 - Extract `useDebouncedValue` and `useInventoryFilters`, which also removes the exhaustive-deps `eslint-disable`.
 - Add Clear filters, active chips, a result count, sort, and numbered pagination.
 - The sort, `lowStock` and `expiringBefore` options need backend support (item 28).
 
-### 25. Shopping page (S)
+### 25. Shopping page (S) — DONE
 - Source: FE 14.
 - Add checkboxes persisted in localStorage, reason badges, and print/share. Reset the "Copied" status.
 
-### 26. Frontend hygiene (S to M)
+### 26. Frontend hygiene (S to M) — DONE
 - Source: FE 15 to 18.
 - Move `statusText` out of a page file and de-duplicate the expiry logic.
 - Add route-level code-splitting and per-route error boundaries.

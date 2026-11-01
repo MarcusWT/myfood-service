@@ -1,62 +1,53 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Package, SearchX, X } from 'lucide-react';
+import { EmptyState } from '@/components/EmptyState';
+import { Pagination } from '@/components/Pagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
+import { PageHeader } from '@/shell/PageHeader';
 import { PAGE_SIZE, useFoodItems } from './api';
 import { CATEGORIES, LOCATIONS, label } from './constants';
+import { InventoryListSkeleton } from './InventoryListSkeleton';
 import { ItemFormDialog } from './ItemFormDialog';
-import { ItemRow } from './ItemRow';
-
-const selectClass = 'h-9 rounded-md border border-input bg-transparent px-2 text-sm';
+import { ItemList } from './ItemList';
+import { useInventoryFilters } from './useInventoryFilters';
 
 export function InventoryPage() {
-  const [params, setParams] = useSearchParams();
-  const location = params.get('location') ?? '';
-  const category = params.get('category') ?? '';
-  const name = params.get('name') ?? '';
-  const page = Math.max(1, Number(params.get('page')) || 1);
-  const [search, setSearch] = useState(name);
+  const f = useInventoryFilters();
   const [adding, setAdding] = useState(false);
-
-  function setParam(patch: Record<string, string>) {
-    const next = new URLSearchParams(params);
-    for (const [k, v] of Object.entries(patch)) {
-      if (v) next.set(k, v);
-      else next.delete(k);
-    }
-    setParams(next, { replace: true });
-  }
-
-  // Debounced search; resets to page 1.
-  useEffect(() => {
-    if (search === name) return;
-    const t = setTimeout(() => setParam({ name: search.trim(), page: '' }), 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
-
-  const { data, isPending, isError, refetch } = useFoodItems({ location, category, name, page });
+  const { data, isPending, isError, isPlaceholderData, refetch } = useFoodItems(f.filters);
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  const total = data?.total;
+  const outOfRange =
+    !!data && !isPlaceholderData && data.total > 0 && data.data.length === 0 && f.filters.page > 1;
+  const { setPage } = f;
+  useEffect(() => {
+    if (outOfRange) setPage(totalPages);
+  }, [outOfRange, totalPages, setPage]);
+  const countText =
+    total === undefined
+      ? ''
+      : `${total} ${total === 1 ? 'item' : 'items'}${f.hasActiveFilters ? ' matching filters' : ''}`;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-4 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Inventory</h1>
-        <Button onClick={() => setAdding(true)}>Add item</Button>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Inventory"
+        actions={<Button onClick={() => setAdding(true)}>Add item</Button>}
+      />
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="search">Search</Label>
-          <Input id="search" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input id="search" value={f.search} onChange={(e) => f.setSearch(e.target.value)} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="f-location">Location</Label>
-          <select
+          <NativeSelect
             id="f-location"
-            className={selectClass}
-            value={location}
-            onChange={(e) => setParam({ location: e.target.value, page: '' })}
+            value={f.filters.location}
+            onChange={(e) => f.setLocation(e.target.value)}
           >
             <option value="">All</option>
             {LOCATIONS.map((l) => (
@@ -64,15 +55,14 @@ export function InventoryPage() {
                 {label(l)}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div className="space-y-1">
           <Label htmlFor="f-category">Category</Label>
-          <select
+          <NativeSelect
             id="f-category"
-            className={selectClass}
-            value={category}
-            onChange={(e) => setParam({ category: e.target.value, page: '' })}
+            value={f.filters.category}
+            onChange={(e) => f.setCategory(e.target.value)}
           >
             <option value="">All</option>
             {CATEGORIES.map((c) => (
@@ -80,11 +70,36 @@ export function InventoryPage() {
                 {label(c)}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
+        {f.hasActiveFilters && (
+          <Button variant="ghost" onClick={f.clear}>
+            Clear filters
+          </Button>
+        )}
       </div>
 
-      {isPending && <p role="status">Loading…</p>}
+      {f.chips.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {f.chips.map((c) => (
+            <Button
+              key={c.key}
+              size="sm"
+              variant="outline"
+              aria-label={`Remove filter: ${c.label}`}
+              onClick={c.remove}
+            >
+              {c.label} <X aria-hidden />
+            </Button>
+          ))}
+        </div>
+      )}
+
+      <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+        {countText}
+      </p>
+
+      {isPending && <InventoryListSkeleton />}
       {isError && (
         <div role="alert">
           <p>Could not load items.</p>
@@ -93,36 +108,44 @@ export function InventoryPage() {
           </Button>
         </div>
       )}
-      {data && data.data.length === 0 && <p>No items found.</p>}
+      {data &&
+        !outOfRange &&
+        data.data.length === 0 &&
+        (f.hasActiveFilters ? (
+          <EmptyState
+            icon={SearchX}
+            title="No items match your filters"
+            action={{ label: 'Clear filters', onClick: f.clear, variant: 'outline' }}
+          />
+        ) : (
+          <EmptyState
+            icon={Package}
+            title="Your inventory is empty"
+            action={{ label: 'Add your first item', onClick: () => setAdding(true) }}
+          />
+        ))}
       {data && data.data.length > 0 && (
-        <ul className="space-y-2">
-          {data.data.map((item) => (
-            <ItemRow key={item.id} item={item} />
-          ))}
-        </ul>
+        <div
+          aria-busy={isPlaceholderData || undefined}
+          className={isPlaceholderData ? 'opacity-60 transition-opacity' : 'transition-opacity'}
+        >
+          <ItemList items={data.data} />
+        </div>
       )}
       {data && totalPages > 1 && (
-        <nav aria-label="Pagination" className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            disabled={page <= 1}
-            onClick={() => setParam({ page: String(page - 1) })}
-          >
-            Previous
-          </Button>
-          <span>
-            Page {page} of {totalPages}
+        <div className="flex flex-wrap items-center gap-3">
+          <Pagination
+            page={f.filters.page}
+            totalPages={totalPages}
+            onPageChange={f.setPage}
+            disabled={isPlaceholderData}
+          />
+          <span className="text-sm">
+            Page {f.filters.page} of {totalPages}
           </span>
-          <Button
-            variant="outline"
-            disabled={page >= totalPages}
-            onClick={() => setParam({ page: String(page + 1) })}
-          >
-            Next
-          </Button>
-        </nav>
+        </div>
       )}
-      {adding && <ItemFormDialog open onOpenChange={setAdding} />}
-    </main>
+      <ItemFormDialog open={adding} onOpenChange={setAdding} />
+    </div>
   );
 }
