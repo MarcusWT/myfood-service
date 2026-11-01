@@ -339,13 +339,16 @@ describe('inventory', () => {
     fail = true;
     await openMenuItem('Rice', 'Remove');
     await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
-    await waitFor(async () => {
-      const els = await screen.findAllByText('Removed "Rice"');
-      expect(els.length).toBeGreaterThan(1);
+    const failing = await screen.findAllByText('Removed "Rice"');
+    const undoButtons = await waitFor(() => {
+      const buttons = failing
+        .map((e) => e.closest('li'))
+        .filter((li): li is HTMLLIElement => li !== null)
+        .flatMap((li) => within(li).queryAllByRole('button', { name: 'Undo' }));
+      expect(buttons.length).toBeGreaterThan(0);
+      return buttons;
     });
-    const els = await screen.findAllByText('Removed "Rice"');
-    const buttons = els.map((e) => within(e.closest('li')!).getByRole('button', { name: 'Undo' }));
-    await userEvent.click(buttons[0]!);
+    await userEvent.click(undoButtons[0]!);
     expect((await screen.findAllByText('Undo broke'))[0]).toBeInTheDocument();
   });
 
